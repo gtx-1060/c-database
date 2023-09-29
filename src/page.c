@@ -3,9 +3,3 @@
 //
 
 #include "page.h"
-
-
-
-struct PageHeader {
-    uint32_t next;
-};

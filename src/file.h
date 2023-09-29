@@ -12,6 +12,7 @@ struct FileHeader {
     uint32_t  magic_number;
     uint32_t page_size;
     uint32_t pages_number;
+    uint16_t data_offset;
 };
 
 struct File {
