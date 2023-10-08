@@ -2,10 +2,16 @@
 // Created by vlad on 28.09.23.
 //
 
-#ifndef LAB1_DEFS_H
-#define LAB1_DEFS_H
+// TODO: make it depends on system page size (_SC_PAGESIZE in unix)
+#define SYS_PAGE_SIZE 4096
 
-#include <stdint-gcc.h>
+#if defined(__LP64__) || defined(_LP64)
+    #define BUILD_64
+#endif
 
+#if defined(__GNUC__) || defined(__GNUC__)
+    #include <stdint-gcc.h>
+#elif defined(_MSC_VER)
 
-#endif //LAB1_DEFS_H
+#endif
+

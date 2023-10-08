@@ -9,8 +9,8 @@
 #define LAB1_FILE_H
 
 struct FileHeader {
-    uint32_t  magic_number;
-    uint32_t page_size;
+    uint32_t magic_number;
+    // in page units
     uint32_t pages_number;
     uint16_t data_offset;
 };
@@ -18,7 +18,7 @@ struct FileHeader {
 struct File {
     char* filename;
     struct FileHeader *header;
-    FILE* data;
+    int descriptor;
 };
 
 #endif //LAB1_FILE_H
