@@ -126,7 +126,7 @@ uint32_t find_empty_row(MemoryManager* manager, PageMeta* header) {
     for (uint8_t* bitmap = page+10; bitmap < page+10+(rows/8); bitmap++) {
         uint8_t mask = 0b10000000;
         do {
-            if ((*bitmap)^mask)
+            if (((*bitmap) & mask) != 0)
                 return i;
             i++;
         } while ((mask >>= 1) != 0);
