@@ -44,13 +44,13 @@ void realloc_chunk(MemoryManager* manager, uint32_t new_offset, uint32_t new_siz
     }
 }
 
-void* read_pages(MemoryManager* manager, uint32_t offset, uint32_t number) {
+void* get_mapped_pages(MemoryManager* manager, uint32_t offset, uint32_t pages) {
     Chunk chunk = manager->chunk;
     if (chunk.data != NULL && (offset > chunk.offset &&
-       offset + number*SYS_PAGE_SIZE < chunk.offset + SYS_PAGE_SIZE*chunk.size)) {
+               offset + pages * SYS_PAGE_SIZE < chunk.offset + SYS_PAGE_SIZE * chunk.size)) {
         return (chunk.data) + (offset-chunk.offset)*SYS_PAGE_SIZE;
     }
-    uint32_t size = (number > DEFAULT_CHUNK_SIZE) ? number : DEFAULT_CHUNK_SIZE;
+    uint32_t size = (pages > DEFAULT_CHUNK_SIZE) ? pages : DEFAULT_CHUNK_SIZE;
     realloc_chunk(manager, offset, size);
     return chunk.data;
 }

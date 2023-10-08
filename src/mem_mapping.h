@@ -34,5 +34,8 @@ typedef struct MemoryManager {
     int file_descriptor;
 } MemoryManager;
 
+void* get_mapped_pages(MemoryManager* manager, uint32_t offset, uint32_t pages);
+void destruct_memory_manager(MemoryManager* manager);
+MemoryManager* init_memory_manager(int fd);
 
 #endif //LAB1_MEM_MAPPING_H
