@@ -9,47 +9,6 @@
 #include "mem_mapping.h"
 #include "util.h"
 
-//typedef struct PageManager {
-//    MemoryManager* memory_manager;
-//} PageManager;
-
-// in the file it stores like:
-// row_size (4bytes), scale (2bytes), next(4bytes),
-// and bitmap of rows occupancy
-typedef struct PageMeta {
-    uint32_t offset;
-    // real file data
-    uint32_t row_size;
-    uint16_t scale;
-    uint32_t next;
-} PageMeta;
-
-typedef enum RowReadStatus {
-    READ_ROW_OK,
-    READ_ROW_OUT_OF_BOUND,
-    READ_ROW_IS_NULL,
-    DEST_NOT_FREE
-} RowReadStatus;
-
-typedef enum RowWriteResult {
-    WRITE_ROW_OK,
-    WRITE_BITMAP_ERROR,
-    WRITE_ROW_NOT_EMPTY,
-    WRITE_ROW_OUT_OF_BOUND
-} RowWriteResult;
-
-typedef struct PageRow {
-    uint32_t index;
-    uint32_t size;
-    void* data;
-} PageRow;
-
-//typedef enum PageOperationResult {
-//    PAGE_READ_OK,
-//    PAGE_NOT_EXISTS,
-//    PAGE_UNREADABLE
-//} PageOperationResult;
-
 //PageManager* init_page_manager(int file_descriptor) {
 //    PageManager* manager = malloc(sizeof(PageManager));
 //    if (manager == NULL)
@@ -78,8 +37,34 @@ uint32_t rows_number(const PageMeta* header) {
     return (uint32_t)floor((32768*(double)header->scale-80)/(8*(double)header->row_size+1));
 }
 
+uint32_t calc_header_size(uint32_t row_size) {
+    return 10 + (uint32_t)ceil(((double)row_size)/8);
+}
+
+uint32_t page_data_space(uint32_t row_size, uint16_t page_scale) {
+    return SYS_PAGE_SIZE*page_scale - calc_header_size(row_size);
+}
+
+// offset from start of the page
+// to the first row of data
 uint32_t first_row_offset(const PageMeta* header) {
-    return 10+(uint32_t)ceil(((double)rows_number(header))/8);
+    return calc_header_size(header->offset);
+}
+
+// return the offset for the next page
+// or zero, if error occurs
+uint32_t create_page(MemoryManager* manager, const PageMeta* header) {
+    uint8_t* page = (uint8_t*)get_mapped_pages(manager, header->offset, header->scale);
+    *(page) = header->row_size;
+    // 0+4
+    *(page+4) = header->scale;
+    // 0+4+2
+    *(page+6) = header->next;
+    uint16_t bytes_for_bitmap = ceil(((double)rows_number(header))/8);
+    // 0+4+2+4
+    if (memset(page+10, 0, bytes_for_bitmap) == 0)
+        return 0; // ERROR
+    return header->offset + header->scale*SYS_PAGE_SIZE;
 }
 
 // return -1, if the bit already has same value
@@ -103,7 +88,7 @@ uint8_t is_row_null(const uint8_t* page, uint32_t row_index) {
     return (*(page + 10 + (row_index / 8)) << (row_index % 8)) & 0b10000000;
 }
 
-RowReadStatus read_row(MemoryManager* manager, PageMeta* header, uint32_t index, PageRow* dest) {
+RowReadStatus read_row(MemoryManager* manager, const PageMeta* header, uint32_t index, PageRow* dest) {
     uint8_t* page = (uint8_t*)get_mapped_pages(manager, header->offset, header->scale);
     if (index >= rows_number(header))
         return READ_ROW_OUT_OF_BOUND;
@@ -126,10 +111,15 @@ void free_row(PageRow* row) {
     row->data = NULL;
 }
 
-RowWriteResult write_row(MemoryManager* manager, PageMeta* header, PageRow* row) {
+PageRow alloc_row(uint32_t size, uint32_t index) {
+    PageRow row = {.data=malloc(size), .index=index, .size=size};
+    return row;
+}
+
+RowWriteResult write_row(MemoryManager* manager, const PageMeta* header, const PageRow* row) {
     if (row->index >= rows_number(header))
         return WRITE_ROW_OUT_OF_BOUND;
-    uint8_t* page = (uint8_t*)get_mapped_pages(manager, header->offset, 1);
+    uint8_t* page = (uint8_t*)get_mapped_pages(manager, header->offset, header->scale);
     if (!is_row_null(page, row->index)) {
         return WRITE_ROW_NOT_EMPTY;
     }
@@ -139,7 +129,16 @@ RowWriteResult write_row(MemoryManager* manager, PageMeta* header, PageRow* row)
     return WRITE_ROW_OK;
 }
 
-int64_t find_empty_row(MemoryManager* manager, PageMeta* header) {
+RowWriteResult remove_row(MemoryManager* manager, const PageMeta* header, uint32_t index) {
+    PageRow empty_row = alloc_row(header->row_size, index);
+    if (memset(empty_row.data, 0, empty_row.size) == 0)
+        return WRITE_BITMAP_ERROR;
+    RowWriteResult result = write_row(manager, header, &empty_row);
+    free_row(&empty_row);
+    return result;
+}
+
+int64_t find_empty_row(MemoryManager* manager, const PageMeta* header) {
     uint8_t* page = (uint8_t*)get_mapped_pages(manager, header->offset, 1);
     uint32_t rows = rows_number(header);
     uint32_t i = 0;
@@ -155,4 +154,3 @@ int64_t find_empty_row(MemoryManager* manager, PageMeta* header) {
     }
     return -1;
 }
-
