@@ -7,17 +7,16 @@
 #include "mem_mapping.h"
 #include "util.h"
 
-#define DEFAULT_CHUNK_SIZE 50
-
 // TODO: Maybe use queue of chunks for better performance
 
 
 void unmap_chunk(Chunk* chunk);
 
-MemoryManager* init_memory_manager(int fd) {
+MemoryManager* init_memory_manager(int fd, uint32_t chunk_size, uint8_t auto_realloc) {
     MemoryManager* manager = malloc(sizeof(MemoryManager));
     if (manager == NULL)
         panic("Cannot create memory manager", 1);
+    manager->chunk.size = chunk_size;
     manager->chunk.data = NULL;
     return manager;
 }
@@ -49,6 +48,9 @@ void* get_mapped_pages(MemoryManager* manager, uint32_t offset, uint32_t pages) 
     if (chunk.data != NULL && (offset > chunk.offset &&
                offset + pages * SYS_PAGE_SIZE < chunk.offset + SYS_PAGE_SIZE * chunk.size)) {
         return (chunk.data) + (offset-chunk.offset)*SYS_PAGE_SIZE;
+    }
+    if (manager->chunk.can_realloc == 0) {
+        panic("ATTEMPT TO GO OUT OF CHUNK BOUNDS!", 1);
     }
     uint32_t size = (pages > DEFAULT_CHUNK_SIZE) ? pages : DEFAULT_CHUNK_SIZE;
     realloc_chunk(manager, offset, size);

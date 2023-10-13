@@ -20,7 +20,7 @@ typedef enum TableDataType {
 
 typedef struct TableSchemeField {
     char name[FIELD_NAME_MAX_SZ];
-    TableDataType type;
+    uint8_t type;
     uint8_t nullable;
 } TableSchemeField;
 
@@ -30,14 +30,17 @@ typedef struct TableScheme {
     TableSchemeField* fields;
 } TableScheme;
 
+// 32 + 2 + 2 + 4 + 4 + 4 + 4 = 52 bytes
 typedef struct TableMeta {
     char name[TABLE_NAME_MAX_SZ];
-    TableSchemeField* fields;
+    uint16_t fields_n;
     uint16_t page_scale;
     uint32_t row_size;
-    uint16_t fields_n;
     uint32_t scheme_page;
-    uint32_t data_page;
+    // on-memory variable only
+    TableSchemeField* fields;
 } TableMeta;
+
+
 
 #endif //LAB1_TABLE_H

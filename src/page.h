@@ -2,6 +2,7 @@
 // Created by vlad on 28.09.23.
 //
 #include "defs.h"
+#include "mem_mapping.h"
 
 #ifndef LAB1_PAGE_H
 #define LAB1_PAGE_H
@@ -26,6 +27,7 @@ typedef enum RowReadStatus {
 
 typedef enum RowWriteResult {
     WRITE_ROW_OK,
+    WRITE_ROW_OK_BUT_FULL,
     WRITE_BITMAP_ERROR,
     WRITE_ROW_NOT_EMPTY,
     WRITE_ROW_OUT_OF_BOUND
@@ -38,5 +40,7 @@ typedef struct PageRow {
 } PageRow;
 
 uint32_t page_data_space(uint32_t row_size, uint16_t page_scale);
+uint32_t create_page(MemoryManager* manager, const PageMeta* header);
+RowWriteResult write_row(MemoryManager* manager, const PageMeta* header, const PageRow* row);
 
 #endif //LAB1_PAGE_H

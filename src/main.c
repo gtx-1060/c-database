@@ -9,8 +9,7 @@ int main() {
     int fd;
     struct stat filestat;
     void *p;
-
-    fd = open("/home/vlad/Downloads/CentOS-7-x86_64-DVD-2009.iso", O_RDONLY);
+    fd = open("/home/vlad/Downloads/CentOS-7-x86_64-DVD-2009.iso", O_RDWR);
     if (fd < 0)
         exit(1);
     if (fstat(fd, &filestat) < 0)

@@ -29,7 +29,15 @@ void read_page_meta(MemoryManager* manager, uint32_t offset, PageMeta* dest) {
     // 0+4
     dest->scale = *((uint16_t*)(pointer + 4));
     // 0+4+2
-    dest->next = *((uint16_t*)(pointer + 6));
+    dest->next = *((uint32_t*)(pointer + 6));
+}
+
+// change the next filed in the header and return the old one
+uint32_t change_next_field(MemoryManager* manager, uint32_t offset, uint32_t next_val) {
+    uint8_t* pointer = (uint8_t*)get_mapped_pages(manager, offset, 1);
+    uint32_t old_next = *(pointer+6);
+    *(pointer+6) = next_val;
+    return old_next;
 }
 
 // maybe it works, maybe not
@@ -116,6 +124,8 @@ PageRow alloc_row(uint32_t size, uint32_t index) {
     return row;
 }
 
+int64_t find_empty_row(MemoryManager* manager, const PageMeta* header); // TODO: move it to somewhere
+
 RowWriteResult write_row(MemoryManager* manager, const PageMeta* header, const PageRow* row) {
     if (row->index >= rows_number(header))
         return WRITE_ROW_OUT_OF_BOUND;
@@ -126,6 +136,8 @@ RowWriteResult write_row(MemoryManager* manager, const PageMeta* header, const P
     if(set_into_bitmap(page, row->index, 1) != 0 )
         return WRITE_BITMAP_ERROR;
     memcpy(page+first_row_offset(header)+row->index, page, row->size);
+    if (find_empty_row(manager, header) == -1)                                          // TODO: may be optimised
+        return WRITE_ROW_OK_BUT_FULL;
     return WRITE_ROW_OK;
 }
 
@@ -138,6 +150,7 @@ RowWriteResult remove_row(MemoryManager* manager, const PageMeta* header, uint32
     return result;
 }
 
+// return -1 if not found
 int64_t find_empty_row(MemoryManager* manager, const PageMeta* header) {
     uint8_t* page = (uint8_t*)get_mapped_pages(manager, header->offset, 1);
     uint32_t rows = rows_number(header);
@@ -154,3 +167,11 @@ int64_t find_empty_row(MemoryManager* manager, const PageMeta* header) {
     }
     return -1;
 }
+
+RowWriteResult find_and_write_row(MemoryManager* manager, const PageMeta* header, PageRow* row) {
+    uint64_t row_id = find_empty_row(manager, header);
+    if (row_id == -1)
+        return WRITE_ROW_OUT_OF_BOUND;
+    return write_row(manager, header, row);
+}
+

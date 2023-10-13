@@ -4,8 +4,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include "defs.h"
 #include "util.h"
-
 
 void panic(char* msg, int code) {
     perror(msg);
