@@ -12,11 +12,17 @@
 // and bitmap of rows occupancy
 typedef struct PageMeta {
     uint32_t offset;
-    // real file data
     uint32_t row_size;
     uint16_t scale;
     uint32_t next;
 } PageMeta;
+
+typedef struct __attribute__((__packed__)) PageOnDrive {
+    uint32_t row_size;
+    uint16_t scale;
+    uint32_t next;
+} PageOnDrive;
+
 
 typedef enum RowReadStatus {
     READ_ROW_OK,

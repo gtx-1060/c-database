@@ -25,11 +25,11 @@
 void read_page_meta(MemoryManager* manager, uint32_t offset, PageMeta* dest) {
     dest->offset = offset;
     uint8_t* pointer = (uint8_t*)get_mapped_pages(manager, dest->offset, 1);
-    dest->row_size = *((uint32_t*)(pointer));
-    // 0+4
-    dest->scale = *((uint16_t*)(pointer + 4));
-    // 0+4+2
-    dest->next = *((uint32_t*)(pointer + 6));
+    PageOnDrive page;
+    page = *((PageOnDrive*)pointer);
+    dest->scale = page.scale;
+    dest->row_size = page.row_size;
+    dest->next = page.next;
 }
 
 // change the next filed in the header and return the old one
@@ -62,15 +62,12 @@ uint32_t first_row_offset(const PageMeta* header) {
 // return the offset for the next page
 // or zero, if error occurs
 uint32_t create_page(MemoryManager* manager, const PageMeta* header) {
-    uint8_t* page = (uint8_t*)get_mapped_pages(manager, header->offset, header->scale);
-    *(page) = header->row_size;
-    // 0+4
-    *(page+4) = header->scale;
-    // 0+4+2
-    *(page+6) = header->next;
+    uint8_t* mem = (uint8_t*)get_mapped_pages(manager, header->offset, header->scale);
+    PageOnDrive page = {.next=header->next, .row_size=header->row_size, .scale=header->scale};
+    *((PageOnDrive*)mem) = page;
     uint16_t bytes_for_bitmap = ceil(((double)rows_number(header))/8);
     // 0+4+2+4
-    if (memset(page+10, 0, bytes_for_bitmap) == 0)
+    if (memset(mem + sizeof(PageOnDrive), 0, bytes_for_bitmap) == 0)
         return 0; // ERROR
     return header->offset + header->scale*SYS_PAGE_SIZE;
 }
@@ -78,7 +75,7 @@ uint32_t create_page(MemoryManager* manager, const PageMeta* header) {
 // return -1, if the bit already has same value
 // return 0 if success
 int8_t set_into_bitmap(uint8_t* page, uint32_t index, uint8_t value) {
-    uint8_t* bitmap_pointer = page + 10 + (index/8);
+    uint8_t* bitmap_pointer = page + sizeof(PageOnDrive) + (index/8);
     uint8_t mask = (uint8_t)pow(2, (7-index) % 8);
     uint8_t masked = mask & (*bitmap_pointer);
     if ((masked != 0 && value != 0) || (masked == 0 && value == 0))

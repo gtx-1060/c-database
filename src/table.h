@@ -41,6 +41,14 @@ typedef struct TableMeta {
     TableSchemeField* fields;
 } TableMeta;
 
+// struct for serialization/deserialization
+typedef struct __attribute__((__packed__)) TableOnDrive {
+    char name[TABLE_NAME_MAX_SZ];
+    uint16_t fields_n;
+    uint16_t page_scale;
+    uint32_t row_size;
+    uint32_t scheme_page;
+} TableOnDrive;
 
 
 #endif //LAB1_TABLE_H

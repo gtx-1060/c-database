@@ -152,6 +152,7 @@ MappedTableMeta read_table(const Storage* storage, uint8_t* pointer) {
             .first_free_page = (uint32_t*)pointer,
             .first_full_page = (uint32_t*)(pointer+sizeof(uint32_t))
     };
+
     return mtable;
 }
 
