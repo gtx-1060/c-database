@@ -13,7 +13,9 @@
 #elif defined(__unix__) || defined(__linux__)
     #include <unistd.h>
     #include "sys/mman.h"
-    #define mem_unmap(addr, length) munmap(addr, length)
+#include "linked_list.h"
+
+#define mem_unmap(addr, length) munmap(addr, length)
     #ifdef BUILD_64
         #define mem_map(addr, length, prot, flags, fd, offset) \
         mmap(addr, length, prot, flags, fd, offset*SYS_PAGE_SIZE)
@@ -23,24 +25,28 @@
     #endif
 #endif
 
+typedef uint32_t chunk_id;
 
 // TODO: make it possible to define size of chunk and possibility of reallocation
 typedef struct Chunk {
-    // in page units
-    uint32_t offset;
-    // in page units
-    uint32_t size;
-    uint8_t can_realloc;
-    void* data;
+    struct List list;
+    uint16_t id;
+    uint32_t size;          // in page units
+    uint32_t offset;        // in page units
+    uint8_t manual_control;
+    void* pointer;
 } Chunk;
 
 typedef struct MemoryManager {
-    Chunk chunk;
+    Chunk* chunk_list;
+    uint16_t chunks_n;
     int file_descriptor;
 } MemoryManager;
 
-void* get_mapped_pages(MemoryManager* manager, uint32_t offset, uint32_t pages);
-void destruct_memory_manager(MemoryManager* manager);
-MemoryManager* init_memory_manager(int fd, uint32_t chunk_size, uint8_t auto_realloc);
+void* get_pages(MemoryManager* manager, uint32_t offset, uint32_t pages);
+void destroy_memory_manager(MemoryManager* manager);
+MemoryManager init_memory_manager(int fd);
+Chunk* load_chunk(MemoryManager* manager, uint32_t offset, uint32_t pages, uint8_t manual);
+void remove_chunk(MemoryManager* manager, chunk_id id);
 
 #endif //LAB1_MEM_MAPPING_H

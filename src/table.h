@@ -8,7 +8,7 @@
 #include "defs.h"
 
 #define TABLE_NAME_MAX_SZ 32
-#define FIELD_NAME_MAX_SZ 32
+//#define FIELD_NAME_MAX_SZ 32
 #define TABLE_MIN_ROWS_PER_PAGE 10
 
 typedef enum TableDataType {
@@ -19,7 +19,7 @@ typedef enum TableDataType {
 } TableDataType;
 
 typedef struct TableSchemeField {
-    char name[FIELD_NAME_MAX_SZ];
+    char* name;
     uint8_t type;
     uint8_t nullable;
 } TableSchemeField;
@@ -30,7 +30,6 @@ typedef struct TableScheme {
     TableSchemeField* fields;
 } TableScheme;
 
-// 32 + 2 + 2 + 4 + 4 + 4 + 4 = 52 bytes
 typedef struct TableMeta {
     char name[TABLE_NAME_MAX_SZ];
     uint16_t fields_n;
@@ -48,6 +47,8 @@ typedef struct __attribute__((__packed__)) TableOnDrive {
     uint16_t page_scale;
     uint32_t row_size;
     uint32_t scheme_page;
+    uint32_t first_free_pg;
+    uint32_t first_full_pg;
 } TableOnDrive;
 
 

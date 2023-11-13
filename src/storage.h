@@ -10,16 +10,17 @@
 #include "page.h"
 
 #define RESERVED_TO_FILE_META 2
-#define RESERVED_TO_TABLES 4
+//#define RESERVED_TO_TABLES 4
 #define FILE_HEADER_MAGIC_NUMBER 0x7F38
 #define ONE_TABLE_META_ON_DRIVE_SIZE 52
 
 typedef struct FileHeader {
     // ALL THE VALUES INCLUDE POINTERS TO THE MAPPED
     // MEMORY THAT COULD BE NOT ALIVE
-    uint16_t* data_offset;
-    uint16_t* tables_number;
-    uint32_t* pages_number;
+    uint16_t magic_number;
+    uint16_t data_offset;
+    uint16_t tables_number;
+    uint32_t pages_number;
 } FileHeader;
 
 typedef struct MappedTableMeta {
@@ -30,9 +31,8 @@ typedef struct MappedTableMeta {
 } MappedTableMeta;
 
 typedef struct Storage {
-    MemoryManager* page_manager;
-    MemoryManager* header_manager;
-    FileHeader header;
+    MemoryManager manager;
+    Chunk* header_chunk;
 } Storage;
 
 typedef struct FieldValue {
@@ -53,8 +53,12 @@ typedef struct TableRecord {
     void** data;
 } TableRecord;
 
+// add table entity into the *tables* table
+// add scheme into the *schemes* table
 MappedTableMeta create_table(Storage* storage, TableMeta* table);
 
+// loads information about table into the memory
+// permanently maps it into the memory
 MappedTableMeta open_table(const Storage* storage, char* name);
 
 RequestFilterResult table_filter_rows(const MemoryManager* manager, TableMeta* table, FieldValue filter);

@@ -18,13 +18,13 @@
 //}
 //
 //void destruct_page_manager(PageManager* manager) {
-//    destruct_memory_manager(manager->memory_manager);
+//    destroy_memory_manager(manager->memory_manager);
 //    free(manager);
 //}
 
 void read_page_meta(MemoryManager* manager, uint32_t offset, PageMeta* dest) {
     dest->offset = offset;
-    uint8_t* pointer = (uint8_t*)get_mapped_pages(manager, dest->offset, 1);
+    uint8_t* pointer = (uint8_t*) get_pages(manager, dest->offset, 1);
     PageOnDrive page;
     page = *((PageOnDrive*)pointer);
     dest->scale = page.scale;
@@ -34,7 +34,7 @@ void read_page_meta(MemoryManager* manager, uint32_t offset, PageMeta* dest) {
 
 // change the next filed in the header and return the old one
 uint32_t change_next_field(MemoryManager* manager, uint32_t offset, uint32_t next_val) {
-    uint8_t* pointer = (uint8_t*)get_mapped_pages(manager, offset, 1);
+    uint8_t* pointer = (uint8_t*) get_pages(manager, offset, 1);
     uint32_t old_next = *(pointer+6);
     *(pointer+6) = next_val;
     return old_next;
@@ -46,7 +46,7 @@ uint32_t rows_number(const PageMeta* header) {
 }
 
 uint32_t calc_header_size(uint32_t row_size) {
-    return 10 + (uint32_t)ceil(((double)row_size)/8);
+    return sizeof(PageOnDrive) + (uint32_t)ceil(((double)row_size)/8);
 }
 
 uint32_t page_data_space(uint32_t row_size, uint16_t page_scale) {
@@ -54,7 +54,7 @@ uint32_t page_data_space(uint32_t row_size, uint16_t page_scale) {
 }
 
 // offset from start of the page
-// to the first row of data
+// to the first row of pointer
 uint32_t first_row_offset(const PageMeta* header) {
     return calc_header_size(header->offset);
 }
@@ -62,7 +62,7 @@ uint32_t first_row_offset(const PageMeta* header) {
 // return the offset for the next page
 // or zero, if error occurs
 uint32_t create_page(MemoryManager* manager, const PageMeta* header) {
-    uint8_t* mem = (uint8_t*)get_mapped_pages(manager, header->offset, header->scale);
+    uint8_t* mem = (uint8_t*) get_pages(manager, header->offset, header->scale);
     PageOnDrive page = {.next=header->next, .row_size=header->row_size, .scale=header->scale};
     *((PageOnDrive*)mem) = page;
     uint16_t bytes_for_bitmap = ceil(((double)rows_number(header))/8);
@@ -90,11 +90,11 @@ int8_t set_into_bitmap(uint8_t* page, uint32_t index, uint8_t value) {
 }
 
 uint8_t is_row_null(const uint8_t* page, uint32_t row_index) {
-    return (*(page + 10 + (row_index / 8)) << (row_index % 8)) & 0b10000000;
+    return (*(page + sizeof(PageOnDrive) + (row_index / 8)) << (row_index % 8)) & 0b10000000;
 }
 
 RowReadStatus read_row(MemoryManager* manager, const PageMeta* header, uint32_t index, PageRow* dest) {
-    uint8_t* page = (uint8_t*)get_mapped_pages(manager, header->offset, header->scale);
+    uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
     if (index >= rows_number(header))
         return READ_ROW_OUT_OF_BOUND;
     if (is_row_null(page, index))
@@ -126,7 +126,7 @@ int64_t find_empty_row(MemoryManager* manager, const PageMeta* header); // TODO:
 RowWriteResult write_row(MemoryManager* manager, const PageMeta* header, const PageRow* row) {
     if (row->index >= rows_number(header))
         return WRITE_ROW_OUT_OF_BOUND;
-    uint8_t* page = (uint8_t*)get_mapped_pages(manager, header->offset, header->scale);
+    uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
     if (!is_row_null(page, row->index)) {
         return WRITE_ROW_NOT_EMPTY;
     }
@@ -149,10 +149,10 @@ RowWriteResult remove_row(MemoryManager* manager, const PageMeta* header, uint32
 
 // return -1 if not found
 int64_t find_empty_row(MemoryManager* manager, const PageMeta* header) {
-    uint8_t* page = (uint8_t*)get_mapped_pages(manager, header->offset, 1);
+    uint8_t* page = (uint8_t*) get_pages(manager, header->offset, 1);
     uint32_t rows = rows_number(header);
     uint32_t i = 0;
-    for (uint8_t* bitmap = page+10; bitmap < page+10+(rows/8); bitmap++) {
+    for (uint8_t* bitmap = page+ sizeof(PageOnDrive); bitmap < page+ sizeof(PageOnDrive)+(rows/8); bitmap++) {
         uint8_t mask = 0b10000000;
         uint8_t in_byte = 0;
         do {

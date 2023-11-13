@@ -9,32 +9,26 @@
 #include "storage.h"
 #include "util.h"
 
-void init_memory_managers(Storage* storage, int fd) {
-    storage->header_manager = init_memory_manager(
-            fd,
-            RESERVED_TO_TABLES + RESERVED_TO_FILE_META,
-            0
-    );
-    storage->page_manager = init_memory_manager(fd, DEFAULT_CHUNK_SIZE, 1);
-}
 
-// return fd
 void create_new_storage(char* filename, Storage* storage) {
     int fd = open(filename, O_RDWR | O_CREAT);
-    init_memory_managers(storage, fd);
-    uint16_t* header = (uint16_t*)get_mapped_pages(storage->header_manager, 0, 1);
-    // define magic number
-    *header = FILE_HEADER_MAGIC_NUMBER;
-    // define data_offset
-    *(header+1) = RESERVED_TO_FILE_META + RESERVED_TO_TABLES;
-    // tables number
-    *(header+2) = 0;
-    // define actual number of pages
-    *((uint32_t*)(header+2)) = RESERVED_TO_FILE_META + RESERVED_TO_TABLES;
-    // set all the reserved for tables metadata memory to zero
-    void* tables_reserved = get_mapped_pages(storage->header_manager,
-     RESERVED_TO_FILE_META, RESERVED_TO_TABLES);
-    memset(tables_reserved, 0, RESERVED_TO_TABLES*SYS_PAGE_SIZE);
+    init_memory_manager(fd);
+    void* pointer = get_pages(&storage->manager, 0, 1);
+    FileHeader header = {
+            .magic_number = FILE_HEADER_MAGIC_NUMBER,
+            .pages_number = RESERVED_TO_FILE_META,
+            .tables_number = 0,
+            .data_offset = RESERVED_TO_FILE_META
+    };
+    *(FileHeader*)pointer = header;
+}
+
+FileHeader get_header(Storage* storage) {
+    return *(FileHeader*)storage->header_chunk->pointer;
+}
+
+void set_header(Storage* storage, FileHeader* header) {
+    memcpy(storage->header_chunk->pointer, header, sizeof(FileHeader));
 }
 
 Storage* init_storage(char* filename) {
@@ -45,31 +39,30 @@ Storage* init_storage(char* filename) {
         create_new_storage(filename, storage);
     } else {
         int fd = open(filename, O_RDWR);
-        init_memory_managers(storage, fd);
+        storage->manager = init_memory_manager(fd);
     }
-    uint16_t* header = (uint16_t*)get_mapped_pages(storage->header_manager, 0, 1);
-    if (*header != FILE_HEADER_MAGIC_NUMBER) {
+    storage->header_chunk = load_chunk(&storage->manager, 0, RESERVED_TO_FILE_META, 1);
+    void* header = storage->header_chunk->pointer;
+    if (*(uint16_t*)header != FILE_HEADER_MAGIC_NUMBER) {
         panic("WRONG FILE PASSED INTO THE STORAGE", 4);
     }
-    storage->header.data_offset = header+1;
-    storage->header.pages_number = (uint32_t*)(header+2);
     return storage;
 }
 
 void destruct_storage(Storage* storage) {
-    destruct_memory_manager(storage->header_manager);
-    destruct_memory_manager(storage->page_manager);
-    free(storage);
+    destroy_memory_manager(&storage->manager);
 }
 
 PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size, uint32_t next) {
+    FileHeader header = get_header(storage);
     PageMeta page = {
             .scale = scale,
             .row_size = row_size,
-            .offset = *storage->header.pages_number
+            .offset = header.pages_number
     };
-    (*storage->header.pages_number)++;
-    create_page(storage->page_manager, &page);
+    header.pages_number++;
+    create_page(&storage->manager, &page);
+    set_header(storage, &header);
     return page;
 }
 
@@ -98,10 +91,10 @@ PageMeta table_write_scheme_page(Storage* storage, TableMeta* table) {
 
 // NOT COMPATIBLE WITH SPACE IN TABLES ARRAY!!!!
 MappedTableMeta create_table(Storage* storage, TableMeta* table) {
-    int8_t* pointer = (int8_t*)get_mapped_pages(
-        storage->header_manager,
-        RESERVED_TO_FILE_META,
-        RESERVED_TO_TABLES
+    int8_t* pointer = (int8_t*) get_pages(
+            storage->header_manager,
+            RESERVED_TO_FILE_META,
+            RESERVED_TO_TABLES
     );
     pointer += ONE_TABLE_META_ON_DRIVE_SIZE * (*storage->header.tables_number);
     if (*pointer != 0)
@@ -158,7 +151,7 @@ MappedTableMeta read_table(const Storage* storage, uint8_t* pointer) {
 
 // NOT COMPATIBLE WITH SPACE IN TABLES ARRAY!!!!
 MappedTableMeta find_table(const Storage* storage, char* name) {
-    uint8_t* pointer = (uint8_t*)get_mapped_pages(
+    uint8_t* pointer = (uint8_t*) get_pages(
             storage->header_manager,
             RESERVED_TO_FILE_META,
             RESERVED_TO_TABLES

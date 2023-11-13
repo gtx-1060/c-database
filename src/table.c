@@ -11,7 +11,7 @@
 static uint8_t table_field_type_sizes[] = {
         [TABLE_FTYPE_INT_32] = 4,
         [TABLE_FTYPE_FLOAT] = 4,
-        [TABLE_FTYPE_STRING] = 4,
+        [TABLE_FTYPE_STRING] = 8,       // uint32 ref to page + uint32 ref to r
         [TABLE_FTYPE_BOOL] = 1
 };
 
