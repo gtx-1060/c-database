@@ -23,12 +23,11 @@ typedef struct FileHeader {
     uint32_t pages_number;
 } FileHeader;
 
-typedef struct MappedTableMeta {
-    TableMeta* table_meta;
-    // !MAPPED! can point to the not alive memory
-    uint32_t* const first_free_page;
-    uint32_t* const first_full_page;
-} MappedTableMeta;
+typedef struct LoadedTable {
+    Table* table_meta;
+    Chunk* chunk;
+    TableRecord* mapped_addr;
+} LoadedTable;
 
 typedef struct Storage {
     MemoryManager manager;
@@ -40,44 +39,39 @@ typedef struct FieldValue {
     void* value;
 } FieldValue;
 
-typedef struct RequestFilterResult {
-    MemoryManager* manager;
-    uint32_t prev_page;
-    uint32_t current_page;
-    uint32_t current_row;
-    FieldValue filter;
-} RequestFilterResult;
-
-typedef struct TableRecord {
-    TableMeta* table;
+typedef struct GotTableRow {
     void** data;
-} TableRecord;
+    RowReadResult result;
+} GotTableRow;
 
 // add table entity into the *tables* table
 // add scheme into the *schemes* table
-MappedTableMeta create_table(Storage* storage, TableMeta* table);
+LoadedTable create_table(Storage* storage, Table* table);
 
-// loads information about table into the memory
-// permanently maps it into the memory
-MappedTableMeta open_table(const Storage* storage, char* name);
+// loads information about the table
+// permanently maps it into memory
+LoadedTable open_table(const Storage* storage, char* name);
 
-RequestFilterResult table_filter_rows(const MemoryManager* manager, TableMeta* table, FieldValue filter);
+//RequestFilterResult table_filter_rows(const Storage* manager, Table* table, FieldValue filter);
 
-uint8_t request_filter_next(RequestFilterResult* iter);
+//uint8_t request_filter_next(RequestFilterResult* iter);
+//
+//PageRow request_filter_get_row(RequestFilterResult* iter);
+//
+//PageMeta request_filter_get_page(RequestFilterResult* iter);
+//
+//void** request_filter_get_record(RequestFilterResult* iter);
 
-PageRow request_filter_get_row(RequestFilterResult* iter);
+void table_insert_row(Storage* storage, LoadedTable* table, void* data[]);
+void table_remove_row(Storage* storage, LoadedTable* table, uint32_t page_ind, uint32_t row_ind);
+GotTableRow table_get_row(Storage* storage, LoadedTable* table, uint32_t page_ind, uint32_t row_ind);
 
-PageMeta request_filter_get_page(RequestFilterResult* iter);
+void table_free_row_mem(LoadedTable* table, void** row);
 
-TableRecord request_filter_get_record(RequestFilterResult* iter);
+//Table* get_all_tables(const MemoryManager* memory, uint16_t* number);
 
-void table_insert_record(const MemoryManager* memory, TableMeta* table, void* data[]);
+//void table_remove_record(const MemoryManager* memory, Table* table, FieldValue filter);
 
-TableMeta* get_all_tables(const MemoryManager* memory, uint16_t* number);
 
-void table_remove_record(const MemoryManager* memory, TableMeta* table, FieldValue filter);
-
-void table_edit_record(const MemoryManager* memory, TableMeta* table, FieldValue filter, uint32_t values_number,
-                       FieldValue* values);
 
 #endif //LAB1_STORAGE_H

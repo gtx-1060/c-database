@@ -14,22 +14,22 @@ void create_new_storage(char* filename, Storage* storage) {
     int fd = open(filename, O_RDWR | O_CREAT);
     init_memory_manager(fd);
     void* pointer = get_pages(&storage->manager, 0, 1);
-    FileHeader header = {
-            .magic_number = FILE_HEADER_MAGIC_NUMBER,
-            .pages_number = RESERVED_TO_FILE_META,
-            .tables_number = 0,
-            .data_offset = RESERVED_TO_FILE_META
-    };
-    *(FileHeader*)pointer = header;
+    FileHeader* header = pointer;
+    header->magic_number = FILE_HEADER_MAGIC_NUMBER;
+    header->pages_number = RESERVED_TO_FILE_META;
+    header->tables_number = 0;
+    header->data_offset = RESERVED_TO_FILE_META;
+    pointer = get_pages(&storage->manager, RESERVED_TO_FILE_META, 1);
+    // TODO: create table of tables, scheme table, table of datatables
 }
 
-FileHeader get_header(Storage* storage) {
-    return *(FileHeader*)storage->header_chunk->pointer;
+FileHeader* get_header(Storage* storage) {
+    return (FileHeader*)storage->header_chunk->pointer;
 }
 
-void set_header(Storage* storage, FileHeader* header) {
-    memcpy(storage->header_chunk->pointer, header, sizeof(FileHeader));
-}
+//void set_header(Storage* storage, FileHeader* header) {
+//    memcpy(storage->header_chunk->pointer, header, sizeof(FileHeader));
+//}
 
 Storage* init_storage(char* filename) {
     Storage* storage = malloc(sizeof(Storage));
@@ -53,114 +53,163 @@ void destruct_storage(Storage* storage) {
     destroy_memory_manager(&storage->manager);
 }
 
-PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size, uint32_t next) {
-    FileHeader header = get_header(storage);
+PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size) {
+    FileHeader* header = get_header(storage);
     PageMeta page = {
             .scale = scale,
             .row_size = row_size,
-            .offset = header.pages_number
+            .offset = header->pages_number
     };
-    header.pages_number++;
-    create_page(&storage->manager, &page);
-    set_header(storage, &header);
+    uint32_t next = create_page(&storage->manager, &page);
+    if (next == 0) {
+        panic("CANT CREATE NEW PAGE!", 4);
+    }
+    header->pages_number = next;
     return page;
 }
 
-PageMeta table_write_scheme_page(Storage* storage, TableMeta* table) {
-    uint32_t scheme_need_mem = sizeof(TableSchemeField)*table->fields_n;
-    uint16_t pg_scale;
-    for (pg_scale = 1; pg_scale * SYS_PAGE_SIZE < scheme_need_mem; pg_scale++) ;
-    PageMeta scheme_page = storage_add_page(storage, pg_scale, sizeof(TableSchemeField), 0);
-    if (scheme_page.offset == 0)
-        panic("CANNOT CREATE PAGE FOR SCHEMES", 4);
-
-    for (uint16_t i = 0; i < table->fields_n; i++) {
-        PageRow row = {
-                .size = scheme_page.row_size,
-                .index = i,
-                .data = table->fields+i
-        };
-        RowWriteResult res = write_row(storage->page_manager, &scheme_page, &row);
-        if (res != WRITE_ROW_OK && res != WRITE_ROW_OK_BUT_FULL) {
-            printf("i=%d field=%s write_err=%d", i, table->fields[i].name, res);
-            panic("CANNOT WRITE SCHEME", 4);
+void remove_from_table_list(Storage* storage, PageMeta* page, uint32_t* list_start) {
+    if (page->prev == 0) {
+        if (page->offset != *list_start) {
+            panic("PAGE HAD .PREV=0, BUT NOT FIRST IN THE FREE_LST", 4);
         }
+        *list_start = page->next;
+    } else {
+        map_page_header(&storage->manager, page->prev)->next = page->next;
     }
-    return scheme_page;
+    if (page->next != 0)
+        map_page_header(&storage->manager, page->next)->prev = page->prev;
 }
 
-// NOT COMPATIBLE WITH SPACE IN TABLES ARRAY!!!!
-MappedTableMeta create_table(Storage* storage, TableMeta* table) {
-    int8_t* pointer = (int8_t*) get_pages(
-            storage->header_manager,
-            RESERVED_TO_FILE_META,
-            RESERVED_TO_TABLES
-    );
-    pointer += ONE_TABLE_META_ON_DRIVE_SIZE * (*storage->header.tables_number);
-    if (*pointer != 0)
-        panic("TABLES POINTER AT THE HEADER POINTS TO THE WRONG PLACE", 4);
-    (*storage->header.pages_number)++;
-
-    strncpy((char*)pointer, table->name, 32);
-    pointer += 32;
-    *((uint16_t*)pointer) = table->fields_n;
-    pointer += sizeof(uint16_t);
-    *((uint16_t*)pointer) = table->page_scale;
-    pointer += sizeof(uint16_t);
-    *((uint32_t*)pointer) = table->row_size;
-    pointer += sizeof(uint32_t);
-    // create page only for table scheme
-    *((uint32_t*)pointer) = table_write_scheme_page(storage, table).offset;
-    pointer += sizeof(uint32_t);
-
-    // create first data page!
-    PageMeta page = storage_add_page(storage, table->page_scale, table->row_size, 0);
-    if (page.offset == 0)
-        panic("CANT CREATE FIRST PAGE OF THE TABLE", 4);
-    *((uint32_t*)pointer) = page.offset;
-    pointer += sizeof(uint32_t);
-    *((uint32_t*)pointer) = 0;
-    MappedTableMeta mtable = {
-            .table_meta = table,
-            .first_free_page = (uint32_t*)(pointer-sizeof(uint32_t)),
-            .first_full_page = (uint32_t*)pointer
-    };
-    return mtable;
+void push_to_table_list(Storage* storage, PageMeta* page, uint32_t* list_start) {
+    // if dest_list is empty
+    if (*list_start == 0) {
+        *list_start = page->offset;
+        page->prev = 0;
+        page->next = 0;
+        write_page_meta(&storage->manager, page);
+        return;
+    }
+    PageMeta list_page;
+    read_page_meta(&storage->manager, *list_start, &list_page);
+    if (list_page.prev != 0) {
+        panic("FIRST PAGE OF FULL_LST HAVE DIFFERENT .PREV VALUE", 4);
+    }
+    *list_start = page->offset;
+    page->prev = 0;
+    page->next = list_page.offset;
+    list_page.prev = page->offset;
+    write_page_meta(&storage->manager, page);
+    write_page_meta(&storage->manager, &list_page);
 }
 
-MappedTableMeta read_table(const Storage* storage, uint8_t* pointer) {
-    TableMeta* table = malloc(sizeof(TableMeta));
-    strncpy(table->name, (char*)pointer, 32);
-    pointer += 32;
-    table->fields_n = *((uint16_t*)pointer);
-    pointer += sizeof(uint16_t);
-    table->page_scale = *((uint16_t*)pointer);
-    pointer += sizeof(uint16_t);
-    table->row_size = *((uint32_t*)pointer);
-    pointer += sizeof(uint32_t);
-    table->scheme_page = *((uint32_t*)pointer);
-    pointer += sizeof(uint32_t);
-    MappedTableMeta mtable = {
-            .table_meta = table,
-            .first_free_page = (uint32_t*)pointer,
-            .first_full_page = (uint32_t*)(pointer+sizeof(uint32_t))
-    };
-
-    return mtable;
+void move_page_to_full_list(Storage* storage, PageMeta* page, LoadedTable* table) {
+    // check whatever it's full
+    if (find_empty_row(&storage->manager, page) != -1) {
+        panic("ATTEMPT TO MOVE NOT FULL PAGE INTO FULL_LIST", 4);
+    }
+    remove_from_table_list(storage, page, &table->mapped_addr->first_free_pg);
+    push_to_table_list(storage, page, &table->mapped_addr->first_full_pg);
 }
 
-// NOT COMPATIBLE WITH SPACE IN TABLES ARRAY!!!!
-MappedTableMeta find_table(const Storage* storage, char* name) {
-    uint8_t* pointer = (uint8_t*) get_pages(
-            storage->header_manager,
-            RESERVED_TO_FILE_META,
-            RESERVED_TO_TABLES
-    );
-    while (*pointer != 0) {
-        if (strncmp(name, (char*)pointer, 32) == 0)
-            return read_table(storage, pointer);
-        pointer += ONE_TABLE_META_ON_DRIVE_SIZE;
+void move_page_to_free_list(Storage* storage, PageMeta* page, LoadedTable* table) {
+    // check whatever it's full
+    if (find_empty_row(&storage->manager, page) == -1) {
+        panic("ATTEMPT TO MOVE FULL PAGE INTO FREE_LIST", 4);
+    }
+    remove_from_table_list(storage, page, &table->mapped_addr->first_full_pg);
+    push_to_table_list(storage, page, &table->mapped_addr->first_free_pg);
+}
+
+PageMeta create_table_page(Storage* storage, LoadedTable* table) {
+    PageMeta pg = storage_add_page(storage, table->table_meta->page_scale, table->table_meta->row_size);
+    push_to_table_list(storage, &pg, &table->mapped_addr->first_free_pg);
+    return pg;
+}
+
+void table_insert_row(Storage* storage, LoadedTable* table, void** data) {
+    void* memory = malloc(table->table_meta->row_size);
+    void* pointer = memory;
+    for (uint32_t i = 0; i < table->table_meta->fields_n; i++) {
+        uint32_t field_sz = table->table_meta->fields[i].actual_size;
+        memcpy(pointer, data[i], field_sz);
+        pointer += field_sz;
+    }
+    if (table->mapped_addr->first_free_pg == 0) {
+        create_table_page(storage, table);
+        if (table->mapped_addr->first_free_pg == 0)
+            panic("first free table page is still null", 4);
+    }
+
+    PageMeta page_header;
+    read_page_meta(&storage->manager, table->mapped_addr->first_free_pg, &page_header);
+    RowWriteResult result = find_and_write_row(&storage->manager, &page_header, memory);
+    switch (result) {
+        case WRITE_ROW_NOT_EMPTY:
+        case WRITE_BITMAP_ERROR:
+        case WRITE_ROW_OUT_OF_BOUND:
+            panic("WRONG INSERT RECORD RESULT", 4);
+            break;
+        case WRITE_ROW_OK_BUT_FULL:
+            move_page_to_full_list(storage, &page_header, table);
+            printf("[log] Record successfully added at:\n  table %s\n  page %u (already full)\n",
+                   table->table_meta->name, page_header.offset);
+            break;
+        case WRITE_ROW_OK:
+            printf("[log] Record successfully added at:\n  table %s\n  page %u\n",
+                   table->table_meta->name, page_header.offset);
+    }
+    free(memory);
+}
+
+GotTableRow table_get_row(Storage* storage, LoadedTable* table, uint32_t page_ind, uint32_t row_ind) {
+    void** data = malloc(sizeof(void*)*table->table_meta->fields_n);
+    GotTableRow result = {.data=NULL};
+    PageRow row = {.index=row_ind};
+    PageMeta page;
+    read_page_meta(&storage->manager, page_ind, &page);
+    result.result = read_row(&storage->manager, &page, &row);
+    if (result.result != READ_ROW_OK)
+        return result;
+    uint32_t pointer = 0;
+    for (uint32_t i = 0; i < table->table_meta->fields_n; i++) {
+        data[i] = malloc(table->table_meta->fields[i].actual_size);
+        memcpy(data[i], (char*)row.data+pointer, table->table_meta->fields[i].actual_size);
+        pointer += table->table_meta->fields[i].actual_size;
+    }
+    free_row(&row);
+    result.data = data;
+    return result;
+}
+
+void table_remove_row(Storage* storage, LoadedTable* table, uint32_t page_ind, uint32_t row_ind) {
+    PageMeta pg_header;
+    read_page_meta(&storage->manager, page_ind, &pg_header);
+    RowRemoveResult result = remove_row(&storage->manager, &pg_header, row_ind);
+    switch (result) {
+        case REMOVE_ROW_OUT_OF_BOUND:
+        case REMOVE_BITMAP_ERROR:
+        case REMOVE_ROW_EMPTY:
+            panic("WRONG REMOVE RECORD RESULT", 4);
+            break;
+        case REMOVE_ROW_OK_PAGE_FREED:
+            move_page_to_free_list(storage, &pg_header, table);
+            printf("[log] Record successfully removed at:\n  table %s\n  page %u\n  moved to free_list\n",
+                   table->table_meta->name, pg_header.offset);
+            break;
+        case REMOVE_ROW_OK:
+            printf("[log] Record successfully removed at:\n  table %s\n  page %u\n",
+                   table->table_meta->name, pg_header.offset);
+            break;
     }
 }
+
+void table_free_row_mem(LoadedTable* table, void** row) {
+    for (uint32_t i = 0; i < table->table_meta->fields_n; i++) {
+        free(row[i]);
+    }
+    free(row);
+}
+
 
 

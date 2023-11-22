@@ -3,7 +3,9 @@ project(lab1 C)
 
 set(CMAKE_C_STANDARD 11)
 
-add_executable(lab1 src/main.c src/page.h src/page.c src/defs.h src/file.h src/file.c src/mem_mapping.h src/mem_mapping.c src/util.c src/util.h src/table.c src/table.h src/storage.c src/storage.h src/linked_list.h src/linked_list.c src/vector.h src/vector.c)
+add_executable(lab1 src/main.c
+        src/page.h src/page.c src/defs.h src/file.h src/file.c src/mem_mapping.h src/mem_mapping.c src/util.c src/util.h src/table.c src/table.h src/storage.c src/storage.h src/linked_list.h src/linked_list.c src/vector.h src/vector.c
+        src/request_iterator.h src/request_iterator.c)
 
 # TO PERF PROFILE WORKS WELL
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")

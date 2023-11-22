@@ -58,6 +58,7 @@ void* get_chunk_pages(MemoryManager* manager, Chunk* chunk, uint32_t offset, uin
     return chunk->pointer;
 }
 
+// TODO: check an existence of identical chunk
 Chunk* load_chunk(MemoryManager* manager, uint32_t offset, uint32_t pages, uint8_t manual) {
     Chunk* chunk = malloc(sizeof(struct Chunk));
     chunk->manual_control = manual;
