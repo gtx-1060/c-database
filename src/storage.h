@@ -66,7 +66,8 @@ void table_insert_row(Storage* storage, LoadedTable* table, void* data[]);
 void table_remove_row(Storage* storage, LoadedTable* table, uint32_t page_ind, uint32_t row_ind);
 GotTableRow table_get_row(Storage* storage, LoadedTable* table, uint32_t page_ind, uint32_t row_ind);
 
-void table_free_row_mem(LoadedTable* table, void** row);
+void* flatten_fields_array(LoadedTable* table, void** array);
+void free_row_mem(LoadedTable* table, void** row);
 
 //Table* get_all_tables(const MemoryManager* memory, uint16_t* number);
 

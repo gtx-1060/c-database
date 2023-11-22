@@ -62,6 +62,7 @@ RowWriteResult find_and_write_row(MemoryManager* manager, const PageMeta* header
 PageRecord* map_page_header(MemoryManager* manager, uint32_t offset);
 void read_page_meta(MemoryManager* manager, uint32_t offset, PageMeta* dest);
 void write_page_meta(MemoryManager* manager, PageMeta* header);
+RowWriteResult replace_row(MemoryManager* manager, const PageMeta* header, const PageRow* row);
 int64_t find_empty_row(MemoryManager* manager, const PageMeta* header);
 RowReadResult read_row(MemoryManager* manager, const PageMeta* header, PageRow* dest);
 RowRemoveResult remove_row(MemoryManager* manager, const PageMeta* header, uint32_t row_ind);

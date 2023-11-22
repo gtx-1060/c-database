@@ -127,14 +127,19 @@ PageMeta create_table_page(Storage* storage, LoadedTable* table) {
     return pg;
 }
 
-void table_insert_row(Storage* storage, LoadedTable* table, void** data) {
+void* flatten_fields_array(LoadedTable* table, void** array) {
     void* memory = malloc(table->table_meta->row_size);
     void* pointer = memory;
     for (uint32_t i = 0; i < table->table_meta->fields_n; i++) {
         uint32_t field_sz = table->table_meta->fields[i].actual_size;
-        memcpy(pointer, data[i], field_sz);
+        memcpy(pointer, array[i], field_sz);
         pointer += field_sz;
     }
+    return memory;
+}
+
+void table_insert_row(Storage* storage, LoadedTable* table, void** array) {
+    void* memory = flatten_fields_array(table, array);
     if (table->mapped_addr->first_free_pg == 0) {
         create_table_page(storage, table);
         if (table->mapped_addr->first_free_pg == 0)
@@ -204,7 +209,7 @@ void table_remove_row(Storage* storage, LoadedTable* table, uint32_t page_ind, u
     }
 }
 
-void table_free_row_mem(LoadedTable* table, void** row) {
+void free_row_mem(LoadedTable* table, void** row) {
     for (uint32_t i = 0; i < table->table_meta->fields_n; i++) {
         free(row[i]);
     }

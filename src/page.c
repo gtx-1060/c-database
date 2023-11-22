@@ -130,6 +130,16 @@ PageRow alloc_row(uint32_t size, uint32_t index) {
     return row;
 }
 
+RowWriteResult replace_row(MemoryManager* manager, const PageMeta* header, const PageRow* row) {
+    if (row->index >= rows_number(header))
+        return WRITE_ROW_OUT_OF_BOUND;
+    uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
+    if(!is_row_empty(page, row->index))
+        return WRITE_ROW_NOT_EMPTY;
+    memcpy(page+first_row_offset(header)+row->index, row->data, header->row_size);
+    return WRITE_ROW_OK;
+}
+
 RowWriteResult write_row(MemoryManager* manager, const PageMeta* header, const PageRow* row) {
     if (row->index >= rows_number(header))
         return WRITE_ROW_OUT_OF_BOUND;
