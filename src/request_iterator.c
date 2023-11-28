@@ -7,43 +7,62 @@
 #include "string.h"
 #include "util.h"
 
-RequestIterator* create_request_iterator(Storage* storage, LoadedTable* table, void* value,
-                                         char* fname, search_filter* filter) {
+RequestIterator* create_request_iterator(Storage* storage, const OpenedTable* table) {
     RequestIterator* req_iter = malloc(sizeof(RequestIterator));
     req_iter->table = table;
-    req_iter->value = value;
-    req_iter->filter = filter;
-    req_iter->field_ind = 0;
     req_iter->found = NULL;
     req_iter->storage = storage;
-    for (uint32_t i = 0; i < table->table_meta->fields_n; i++) {
-        if (strcmp(table->table_meta->fields[i].name, fname) == 0) {
-            req_iter->field_ind = i;
-            break;
-        }
-    }
-    if (req_iter->field_ind == 0)
-        return NULL;
+    req_iter->filters_list = NULL;
     req_iter->row_pointer = 0;
     req_iter->page_pointer = table->mapped_addr->first_free_pg;
     req_iter->source = TABLE_FREE_LIST;
     return req_iter;
 }
 
+void request_iterator_add_filter(RequestIterator* iter, filter_predicate predicate, void* value, char* fname) {
+    for (uint32_t i = 0; i < iter->table->mapped_addr->fields_n; i++) {
+        if (strcmp(iter->table->scheme[i].name, fname) == 0) {
+            RequestFilter* filter = malloc(sizeof(RequestFilter));
+            filter->field = iter->table->scheme+i;
+            filter->value = value;
+            filter->predicate = predicate;
+            if (iter->filters_list == NULL) {
+                lst_init(filter->list);
+                iter->filters_list = filter;
+                return;
+            }
+            lst_push(iter->filters_list->list, filter);
+            return;
+        }
+    }
+}
+
+uint8_t check_filters(RequestIterator* iter, void* row[]) {
+    if (iter->filters_list == NULL)
+        return 1;
+    RequestFilter* f = iter->filters_list;
+    do {
+        if (!f->predicate(f->field, row, f->value))
+            return 0;
+        f = (RequestFilter*)f->list->next;
+    } while (f != iter->filters_list);
+    return 1;
+}
+
 RequestIteratorResult request_iterator_next(RequestIterator* iter) {
-    GotTableRow row;
+    GetRowResult row;
     while (iter->source == TABLE_FREE_LIST || iter->page_pointer != 0) {
         row = table_get_row(iter->storage, iter->table, iter->page_pointer, iter->row_pointer);
         switch (row.result) {
             case READ_ROW_OK:
                 iter->row_pointer++;
-                if (iter->filter(iter->table, iter->field_ind, row.data, iter->value)) {
+                if (check_filters(iter, row.data)) {
                     if (iter->found)
-                        free_row_mem(iter->table, iter->found);
+                        free_row_array(iter->table, iter->found);
                     iter->found = row.data;
                     return REQUEST_ROW_FOUND;
                 } else {
-                    free_row_mem(iter->table, row.data);
+                    free_row_array(iter->table, row.data);
                 }
                 break;
             case READ_ROW_IS_NULL:
@@ -78,17 +97,17 @@ void request_iterator_replace_current(RequestIterator* iter, void** row) {
     PageMeta pg_header;
     PageRow pg_row = {
             .index=iter->row_pointer-1,
-            .data=flatten_fields_array(iter->table, row)
+            .data=prepare_row_for_insertion(iter->storage, iter->table, row)
     };
     read_page_meta(&iter->storage->manager, iter->page_pointer, &pg_header);
-    RowWriteResult result = replace_row(&iter->storage->manager, &pg_header, &pg_row);
+    RowWriteStatus result = replace_row(&iter->storage->manager, &pg_header, &pg_row);
     if (result != WRITE_ROW_OK) {
         panic("ERROR WHILE UPDATING ROW", 5);
     }
     free(pg_row.data);
 }
 
-// returns list of row fields
+// returns list of row scheme
 // delegates responsibility for
 // freeing it to the caller
 void** request_iterator_take_found(RequestIterator* iter) {
@@ -100,6 +119,10 @@ void** request_iterator_take_found(RequestIterator* iter) {
 
 void request_iterator_free(RequestIterator* iter) {
     if (iter->found)
-        free_row_mem(iter->table, iter->found);
+        free_row_array(iter->table, iter->found);
+    while (iter->filters_list->list->next != iter->filters_list->list) {
+        free(lst_pop(iter->filters_list->list));
+    }
+    free(iter->filters_list);
     free(iter);
 }

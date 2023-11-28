@@ -32,41 +32,49 @@ typedef struct PageRow {
     void* data;
 } PageRow;
 
-typedef enum RowReadResult {
+typedef enum RowReadStatus {
     READ_ROW_OK,
     READ_ROW_OUT_OF_BOUND,
     READ_ROW_IS_NULL,
     READ_ROW_DEST_NOT_FREE
-} RowReadResult;
+} RowReadStatus;
 
-typedef enum RowWriteResult {
+typedef enum RowWriteStatus {
     WRITE_ROW_OK,
     WRITE_ROW_OK_BUT_FULL,
     WRITE_BITMAP_ERROR,
     WRITE_ROW_NOT_EMPTY,
     WRITE_ROW_OUT_OF_BOUND
-} RowWriteResult;
+} RowWriteStatus;
 
-typedef enum RowRemoveResult {
+typedef enum RowRemoveStatus {
     REMOVE_ROW_OK,
     REMOVE_ROW_OK_PAGE_FREED,
     REMOVE_BITMAP_ERROR,
     REMOVE_ROW_EMPTY,
     REMOVE_ROW_OUT_OF_BOUND
-} RowRemoveResult;
+} RowRemoveStatus;
+
+typedef struct RowWriteResult {
+    uint32_t row_id;
+    RowWriteStatus status;
+} RowWriteResult;
 
 uint32_t page_actual_size(uint32_t row_size, uint16_t page_scale);
 uint32_t create_page(MemoryManager* manager, const PageMeta* header);
-RowWriteResult write_row(MemoryManager* manager, const PageMeta* header, const PageRow* row);
+RowWriteStatus write_row(MemoryManager* manager, const PageMeta* header, const PageRow* row);
 RowWriteResult find_and_write_row(MemoryManager* manager, const PageMeta* header, void* data);
 PageRecord* map_page_header(MemoryManager* manager, uint32_t offset);
 void read_page_meta(MemoryManager* manager, uint32_t offset, PageMeta* dest);
 void write_page_meta(MemoryManager* manager, PageMeta* header);
-RowWriteResult replace_row(MemoryManager* manager, const PageMeta* header, const PageRow* row);
+RowWriteStatus replace_row(MemoryManager* manager, const PageMeta* header, const PageRow* row);
 int64_t find_empty_row(MemoryManager* manager, const PageMeta* header);
-RowReadResult read_row(MemoryManager* manager, const PageMeta* header, PageRow* dest);
-RowRemoveResult remove_row(MemoryManager* manager, const PageMeta* header, uint32_t row_ind);
+RowReadStatus read_row(MemoryManager* manager, const PageMeta* header, PageRow* dest);
+RowRemoveStatus remove_row(MemoryManager* manager, const PageMeta* header, uint32_t row_ind);
 void free_row(PageRow* row);
 uint32_t next_page_index(MemoryManager* manager, uint32_t current_page);
+
+uint32_t row_offset(const PageMeta* header, uint32_t row_ind);
+void* get_row_of_mapped_page(MemoryManager* manager, Chunk* chunk, uint32_t row_ind);
 
 #endif //LAB1_PAGE_H

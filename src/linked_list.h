@@ -5,10 +5,10 @@
 #ifndef LAB1_LINKED_LIST_H
 #define LAB1_LINKED_LIST_H
 
-struct List {
+typedef struct List {
     struct List* next;
     struct List* prev;
-};
+} List;
 
 void lst_init(struct List *lst);
 int lst_empty(struct List *lst);

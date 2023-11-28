@@ -8,6 +8,7 @@
 #include "mem_mapping.h"
 #include "table.h"
 #include "page.h"
+#include "request_iterator.h"
 
 #define RESERVED_TO_FILE_META 2
 //#define RESERVED_TO_TABLES 4
@@ -23,15 +24,19 @@ typedef struct FileHeader {
     uint32_t pages_number;
 } FileHeader;
 
-typedef struct LoadedTable {
-    Table* table_meta;
+typedef struct OpenedTable {
+//    Table* table_meta;
+    SchemeItem* scheme;
     Chunk* chunk;
     TableRecord* mapped_addr;
-} LoadedTable;
+} OpenedTable;
 
 typedef struct Storage {
     MemoryManager manager;
     Chunk* header_chunk;
+    OpenedTable tables;
+//    OpenedTable heaps_table;
+    OpenedTable scheme_table;
 } Storage;
 
 typedef struct FieldValue {
@@ -39,20 +44,24 @@ typedef struct FieldValue {
     void* value;
 } FieldValue;
 
-typedef struct GotTableRow {
+typedef struct GetRowResult {
     void** data;
-    RowReadResult result;
-} GotTableRow;
+    RowReadStatus result;
+} GetRowResult;
+
+typedef struct InsertRowResult {
+    uint32_t page_id;
+    uint32_t row_id;
+} InsertRowResult;
 
 // add table entity into the *tables* table
-// add scheme into the *schemes* table
-LoadedTable create_table(Storage* storage, Table* table);
+//void write_table(Storage* storage, Table* table, OpenedTable* dest);
 
 // loads information about the table
 // permanently maps it into memory
-LoadedTable open_table(const Storage* storage, char* name);
+uint8_t map_table(Storage* storage, RequestIterator* iter, OpenedTable* dest);
 
-//RequestFilterResult table_filter_rows(const Storage* manager, Table* table, FieldValue filter);
+//RequestFilterResult table_filter_rows(const Storage* manager, Table* table, FieldValue predicate);
 
 //uint8_t request_filter_next(RequestFilterResult* iter);
 //
@@ -62,16 +71,21 @@ LoadedTable open_table(const Storage* storage, char* name);
 //
 //void** request_filter_get_record(RequestFilterResult* iter);
 
-void table_insert_row(Storage* storage, LoadedTable* table, void* data[]);
-void table_remove_row(Storage* storage, LoadedTable* table, uint32_t page_ind, uint32_t row_ind);
-GotTableRow table_get_row(Storage* storage, LoadedTable* table, uint32_t page_ind, uint32_t row_ind);
+InsertRowResult table_insert_row(Storage* storage, const OpenedTable* table, void* array[]);
+void table_remove_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind);
+GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind);
 
-void* flatten_fields_array(LoadedTable* table, void** array);
-void free_row_mem(LoadedTable* table, void** row);
+void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void* array[]);
+void free_row_array(const OpenedTable* table, void** row);
+FileHeader* get_header(Storage* storage);
+PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size);
+
+
+void close_table(Storage* storage, OpenedTable* table);
 
 //Table* get_all_tables(const MemoryManager* memory, uint16_t* number);
 
-//void table_remove_record(const MemoryManager* memory, Table* table, FieldValue filter);
+//void table_remove_record(const MemoryManager* memory, Table* table, FieldValue predicate);
 
 
 

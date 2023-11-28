@@ -22,6 +22,12 @@
 //    free(manager);
 //}
 
+void* get_row_of_mapped_page(MemoryManager* manager, Chunk* chunk, uint32_t row_ind) {
+    PageMeta pg;
+    read_page_meta(manager, chunk->offset, &pg);
+    return (void*)((char*)chunk->pointer + row_offset(&pg, row_ind));
+}
+
 // WARNING: when you call it twice or call get_pages()
 // the first mapped page would destroy itself
 PageRecord* map_page_header(MemoryManager* manager, uint32_t offset) {
@@ -70,17 +76,22 @@ uint32_t first_row_offset(const PageMeta* header) {
     return calc_header_size(header->offset);
 }
 
+// offset from start of the page
+// to the first row of pointer
+uint32_t row_offset(const PageMeta* header, uint32_t row_ind) {
+    return first_row_offset(header)+row_ind*header->row_size;
+}
+
 // return the offset for the next page
 // or zero, if error occurs
 uint32_t create_page(MemoryManager* manager, const PageMeta* header) {
-    uint8_t* mem = (uint8_t*) get_pages(manager, header->offset, header->scale);
+    void* mem = get_pages(manager, header->offset, header->scale);
+    if (memset(mem, 0, header->scale*SYS_PAGE_SIZE) == 0)
+        return 0; // ERROR
     PageRecord page = {.next=header->next, .row_size=header->row_size, .scale=header->scale};
     *((PageRecord*)mem) = page;
-    uint16_t bytes_for_bitmap = ceil(((double)rows_number(header))/8);
-    // 0+4+2+4
-    if (memset(mem + sizeof(PageRecord), 0, bytes_for_bitmap) == 0)
-        return 0; // ERROR
-    return header->offset + header->scale*SYS_PAGE_SIZE;
+//    uint16_t bytes_for_bitmap = ceil(((double)rows_number(header))/8);
+    return header->offset + header->scale;
 }
 
 // return -1, if the bit already has same value
@@ -104,7 +115,7 @@ uint8_t is_row_empty(const uint8_t* page, uint32_t row_index) {
     return (*(page + sizeof(PageRecord) + (row_index / 8)) << (row_index % 8)) & 0b10000000;
 }
 
-RowReadResult read_row(MemoryManager* manager, const PageMeta* header, PageRow* dest) {
+RowReadStatus read_row(MemoryManager* manager, const PageMeta* header, PageRow* dest) {
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
     if (dest->index >= rows_number(header))
         return READ_ROW_OUT_OF_BOUND;
@@ -116,7 +127,7 @@ RowReadResult read_row(MemoryManager* manager, const PageMeta* header, PageRow* 
     if (dest->data == NULL) {
         panic("CANNOT ALLOC MEM FOR ROW", 2);
     }
-    memcpy(dest->data, page+first_row_offset(header)+index, header->row_size);
+    memcpy(dest->data, page+first_row_offset(header)+dest->index, header->row_size);
     return READ_ROW_OK;
 }
 
@@ -130,7 +141,7 @@ PageRow alloc_row(uint32_t size, uint32_t index) {
     return row;
 }
 
-RowWriteResult replace_row(MemoryManager* manager, const PageMeta* header, const PageRow* row) {
+RowWriteStatus replace_row(MemoryManager* manager, const PageMeta* header, const PageRow* row) {
     if (row->index >= rows_number(header))
         return WRITE_ROW_OUT_OF_BOUND;
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
@@ -140,7 +151,7 @@ RowWriteResult replace_row(MemoryManager* manager, const PageMeta* header, const
     return WRITE_ROW_OK;
 }
 
-RowWriteResult write_row(MemoryManager* manager, const PageMeta* header, const PageRow* row) {
+RowWriteStatus write_row(MemoryManager* manager, const PageMeta* header, const PageRow* row) {
     if (row->index >= rows_number(header))
         return WRITE_ROW_OUT_OF_BOUND;
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
@@ -155,7 +166,7 @@ RowWriteResult write_row(MemoryManager* manager, const PageMeta* header, const P
     return WRITE_ROW_OK;
 }
 
-RowRemoveResult remove_row(MemoryManager* manager, const PageMeta* header, uint32_t row_ind) {
+RowRemoveStatus remove_row(MemoryManager* manager, const PageMeta* header, uint32_t row_ind) {
     if (row_ind >= rows_number(header))
         return REMOVE_ROW_OUT_OF_BOUND;
     int64_t empty_row = find_empty_row(manager, header);
@@ -187,11 +198,16 @@ int64_t find_empty_row(MemoryManager* manager, const PageMeta* header) {
 }
 
 RowWriteResult find_and_write_row(MemoryManager* manager, const PageMeta* header, void* data) {
-    uint64_t row_id = find_empty_row(manager, header);
-    if (row_id == -1)
-        return WRITE_ROW_OUT_OF_BOUND;
+    RowWriteResult result = {0};
+    int64_t row_id = find_empty_row(manager, header);
+    if (row_id == -1){
+        result.status = WRITE_ROW_OUT_OF_BOUND;
+        return result;
+    }
+    result.row_id = row_id;
     PageRow row = {.data = data, .index = row_id};
-    return write_row(manager, header, &row);
+    result.status = write_row(manager, header, &row);
+    return result;
 }
 
 uint32_t next_page_index(MemoryManager* manager, uint32_t current_page) {
