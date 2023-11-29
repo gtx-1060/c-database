@@ -9,9 +9,6 @@
 #include "util.h"
 #include "search_filters.h"
 
-#define HEAP_TABLES_NAME "#heap_table#"
-#define HEAP_ROW_SIZE_STEP 50
-
 void write_table(Storage* storage, Table* table, OpenedTable* dest);
 
 FileHeader* get_header(Storage* storage) {
@@ -96,15 +93,6 @@ PageMeta create_table_page(Storage* storage, const OpenedTable* table) {
     return pg;
 }
 
-TableScheme get_heap_scheme(uint32_t str_len) {
-    TableScheme scheme = create_table_scheme(3);
-    add_scheme_field(&scheme, "size", TABLE_FTYPE_UINT_16, 0);
-    add_scheme_field(&scheme, "data", TABLE_FTYPE_CHARS, 1);
-    set_last_field_size(&scheme, ((str_len / HEAP_ROW_SIZE_STEP) + 1) * HEAP_ROW_SIZE_STEP);
-    add_scheme_field(&scheme, "table_id", TABLE_FTYPE_UINT_32, 0);
-    return scheme;
-}
-
 void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
     // we need heap_table with at least
     // row_size > size(str_len) + size(table_id)
@@ -116,7 +104,7 @@ void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
     request_iterator_add_filter(iter, greater_filter, &str_len, "row_size");
     request_iterator_add_filter(iter, less_filter, &upper_bound, "row_size");
     if (!map_table(storage, iter, heap_table)) {
-        TableScheme scheme = get_heap_scheme(str_len);
+        TableScheme scheme = get_heap_table_scheme(str_len);
         Table* table = init_table(&scheme, HEAP_TABLES_NAME);
         write_table(storage, table, heap_table);
         heap_table->scheme = table->fields;
@@ -126,7 +114,7 @@ void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
         request_iterator_free(iter);
         return;
     }
-    heap_table->scheme = get_heap_scheme(str_len).fields;
+    heap_table->scheme = get_heap_table_scheme(str_len).fields;
     request_iterator_free(iter);
 }
 
@@ -255,14 +243,14 @@ void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_heade
     }
     // str len to calculate offset from start row to table_id
     uint16_t str_len = *(uint16_t*)row.data;
-    uint32_t table_id = *(uint32_t*)((char*)row.data + str_len + sizeof(uint16_t));
+    uint16_t table_id = *(uint16_t*)((char*)row.data + str_len + sizeof(uint16_t));
     free_row(&row);
     // look for the heap table and remove row with string
     RequestIterator* iter = create_request_iterator(storage, storage->tables);
     request_iterator_add_filter(iter, equals_filter, &table_id, "table_id");
     OpenedTable heap_table;
     map_table(storage, iter, &heap_table);
-    heap_table.scheme = get_heap_scheme(str_len).fields;
+    heap_table.scheme = get_heap_table_scheme(str_len).fields;
     table_remove_row(storage, &heap_table, str_page_ind, str_row_ind);
     close_table(storage, &heap_table);
 }
@@ -308,10 +296,23 @@ uint8_t map_table(Storage* storage, RequestIterator* iter, OpenedTable* dest) {
     return 1;
 }
 
-// call after creating mapping for the table
+// call it after creating mapping for the table
 // using map_table(...) function
 uint8_t table_load_scheme(Storage* storage, OpenedTable* dest) {
-    // TODO
+    TableScheme scheme = create_table_scheme(dest->mapped_addr->fields_n);
+    RequestIterator* iter = create_request_iterator(storage, &storage->scheme_table);
+    request_iterator_add_filter(iter, equals_filter, &dest->mapped_addr->table_id, "table_id");
+    for (uint32_t i = 0; i < dest->mapped_addr->fields_n; i++) {
+        if (request_iterator_next(iter) == REQUEST_SEARCH_END) {
+            request_iterator_free(iter);
+            return 0;
+        }
+        void** row = iter->found;
+        insert_scheme_field(&scheme, (char*)row[0], *(uint8_t*)row[1],
+                            *(uint8_t*)row[2], *(uint16_t*)row[3]);
+    }
+    request_iterator_free(iter);
+    return 1;
 }
 
 uint8_t open_table(Storage* storage, char* name, OpenedTable* dest) {
@@ -349,20 +350,24 @@ void write_table(Storage* storage, Table * table, OpenedTable* dest) {
             (TableRecord*)get_row_of_mapped_page(&storage->manager, dest->chunk, result.row_id);
 }
 
-uint8_t write_table_scheme(Storage* storage, Table* table) {
-    // TODO
-}
-
-void create_table(Storage* storage, Table* table, OpenedTable* dest) {
-    // FIXME
-    write_table(storage, table, dest);
-    if (!write_table_scheme(storage, table)) {
-        panic("CANT CREATE SCHEME FOR TABLE", 5);
+uint8_t write_table_scheme(Storage* storage, Table* table, uint16_t table_id) {
+    for (uint32_t i = 0; i < table->fields_n; i++) {
+        SchemeItem* field = table->fields+i;
+        void* row[] = {field->name, &field->type, &field->nullable, &i, &table_id};
+        table_insert_row(storage, &storage->scheme_table, row);
     }
 }
 
+// create table and open it
+void create_table(Storage* storage, Table* table, OpenedTable* dest) {
+    write_table(storage, table, dest);
+    write_table_scheme(storage, table, dest->mapped_addr->table_id);
+    table_load_scheme(storage, dest);
+}
+
 void close_table(Storage* storage, OpenedTable* table) {
-    // TODO
+    free_scheme(table->scheme, table->mapped_addr->fields_n);
+    remove_chunk(&storage->manager, table->chunk->id);
 }
 
 void free_row_array(const OpenedTable* table, void** row) {

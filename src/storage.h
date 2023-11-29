@@ -11,7 +11,6 @@
 #include "request_iterator.h"
 
 #define RESERVED_TO_FILE_META 2
-//#define RESERVED_TO_TABLES 4
 #define FILE_HEADER_MAGIC_NUMBER 0x7F38
 #define ONE_TABLE_META_ON_DRIVE_SIZE 52
 
@@ -60,26 +59,16 @@ typedef struct InsertRowResult {
 // loads information about the table
 // permanently maps it into memory
 uint8_t map_table(Storage* storage, RequestIterator* iter, OpenedTable* dest);
-
-//RequestFilterResult table_filter_rows(const Storage* manager, Table* table, FieldValue predicate);
-
-//uint8_t request_filter_next(RequestFilterResult* iter);
-//
-//PageRow request_filter_get_row(RequestFilterResult* iter);
-//
-//PageMeta request_filter_get_page(RequestFilterResult* iter);
-//
-//void** request_filter_get_record(RequestFilterResult* iter);
+void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void* array[]);
+void write_table(Storage* storage, Table * table, OpenedTable* dest);
 
 InsertRowResult table_insert_row(Storage* storage, const OpenedTable* table, void* array[]);
 void table_remove_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind);
 GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind);
 
-void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void* array[]);
 void free_row_array(const OpenedTable* table, void** row);
 FileHeader* get_header(Storage* storage);
 PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size);
-
 
 void close_table(Storage* storage, OpenedTable* table);
 

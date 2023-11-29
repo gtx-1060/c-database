@@ -3,10 +3,13 @@
 //
 
 #include <fcntl.h>
-#include <string.h>
+#include <malloc.h>
+#include <sys/stat.h>
 #include "storage_intlzr.h"
 #include "util.h"
 #include "search_filters.h"
+
+void create_scheme_table(Storage *storage);
 
 // must be called at first!
 RowWriteStatus create_tables_table(Storage *storage) {
@@ -36,58 +39,24 @@ RowWriteStatus create_tables_table(Storage *storage) {
 
 // returns 1 if table exists
 // 0 if nothing to load
-void load_tables_table(Storage* storage) {
-    TableScheme scheme = create_table_scheme(7);
-    add_scheme_field(&scheme, "name", TABLE_FTYPE_CHARS, 0);
-    set_last_field_size(&scheme, 32);
-    add_scheme_field(&scheme, "table_id", TABLE_FTYPE_UINT_16, 0);
-    add_scheme_field(&scheme, "fields_n", TABLE_FTYPE_UINT_16, 0);
-    add_scheme_field(&scheme, "page_scale", TABLE_FTYPE_UINT_16, 0);
-    add_scheme_field(&scheme, "row_size", TABLE_FTYPE_UINT_32, 0);
-    add_scheme_field(&scheme, "first_free_pg", TABLE_FTYPE_UINT_32, 0);
-    add_scheme_field(&scheme, "first_full_pg", TABLE_FTYPE_UINT_32, 0);
-    storage->tables.scheme = scheme.fields;
-
+void open_tables_table(Storage* storage) {
+    storage->tables.scheme = get_table_of_tables_scheme().fields;
     TableRecord stub = {0};
     stub.first_free_pg = RESERVED_TO_FILE_META;
     storage->tables.mapped_addr = &stub;
     RequestIterator* iter = create_request_iterator(storage, &storage->tables);
     char* tablename = "tables";
-    char* fieldname = "name";
-    request_iterator_add_filter(iter, equals_filter, tablename, fieldname);
+    request_iterator_add_filter(iter, equals_filter, tablename, "name");
     if (!map_table(storage, iter, &storage->tables)) {
         panic("CANT OPEN TABLE FOR TABLE, NOT FOUND!",  6);
     }
     request_iterator_free(iter);
 }
 
-//void create_heaps_table(Storage* storage) {
-//    char* name = "rowdata_tables_table";
-//    uint16_t fields_n = 4;
-//    uint16_t pg_scale = 1;
-//    uint16_t row_size = 1;
-//    uint16_t first_pg = 0;
-//    void* data[] = {&name, &get_header(storage)->tables_number, &fields_n,
-//                    &pg_scale,&row_size, &first_pg, &first_pg};
-//    table_insert_row(storage, &storage->tables, data);
-//    get_header(storage)->tables_number++;
-//}
-//
-//void load_heaps_table(Storage* storage) {
-//    if (!map_table(storage, "rowdata_tables_table", &storage->heaps_table)) {
-//        panic("CANT OPEN TABLE FOR TABLE, NOT FOUND!",  6);
-//    }
-//    TableScheme scheme = create_table_scheme(4);
-//    add_scheme_field(&scheme, "page_scale", TABLE_FTYPE_UINT_16, 0);
-//    add_scheme_field(&scheme, "row_size", TABLE_FTYPE_UINT_32, 0);
-//    add_scheme_field(&scheme, "first_free_pg", TABLE_FTYPE_UINT_32, 0);
-//    add_scheme_field(&scheme, "first_full_pg", TABLE_FTYPE_UINT_32, 0);
-//    storage->heaps_table.scheme = scheme.fields;
-//}
 
 void create_new_storage(Storage* storage, char* filename) {
     int fd = open(filename, O_RDWR | O_CREAT);
-    init_memory_manager(fd);
+    storage->manager = init_memory_manager(fd);
     storage->header_chunk = load_chunk(&storage->manager, 0, RESERVED_TO_FILE_META, 1);
     FileHeader* header = get_header(storage);
     header->magic_number = FILE_HEADER_MAGIC_NUMBER;
@@ -96,33 +65,52 @@ void create_new_storage(Storage* storage, char* filename) {
     header->data_offset = RESERVED_TO_FILE_META;
 
     create_tables_table(storage);
-    load_tables_table(storage);
+    open_tables_table(storage);
+    create_scheme_table(storage);
+}
 
-    TableScheme st_scheme = create_table_scheme(5);
-    add_scheme_field(&st_scheme, "name", TABLE_FTYPE_STRING, 0);
-    add_scheme_field(&st_scheme, "type", TABLE_FTYPE_BYTE, 0);
-    add_scheme_field(&st_scheme, "table_id", TABLE_FTYPE_UINT_32, 0);
-    add_scheme_field(&st_scheme, "nullable", TABLE_FTYPE_BOOL, 0);
-    add_scheme_field(&st_scheme, "order", TABLE_FTYPE_UINT_16, 0);
-    Table* st = init_table(&st_scheme, "scheme_table");
-    // FIXME
+void create_scheme_table(Storage *storage) {
+    TableScheme scheme = get_scheme_table_scheme();
+    Table* st = init_table(&scheme, "scheme_table");
+    write_table(storage, st, &storage->scheme_table);
+    storage->scheme_table.scheme = scheme.fields;
+    free(st);
+}
+
+void open_scheme_table(Storage *storage) {
+    RequestIterator* iter = create_request_iterator(storage, &storage->tables);
+    char* scheme_table_name = "scheme_table";
+    request_iterator_add_filter(iter, equals_filter, &scheme_table_name, "name");
+    if (!map_table(storage, iter, &storage->scheme_table)) {
+        panic("CANT LOAD SCHEME TABLE", 6);
+    }
+    request_iterator_free(iter);
+    storage->scheme_table.scheme = get_scheme_table_scheme().fields;
 }
 
 Storage* init_storage(char* filename) {
-//    Storage* storage = malloc(sizeof(Storage));
-//    struct stat stat_buf;
-//    // if file not exists
-//    if (stat(filename, &stat_buf) < 0) {
-//        create_new_storage(storage, filename);
-//    } else {
-//        int fd = open(filename, O_RDWR);
-//        storage->manager = init_memory_manager(fd);
-//    }
-    // **ALREADY DID IT IN CREATE METHOD!!! FIX IT!**
-//    storage->header_chunk = load_chunk(&storage->manager, 0, RESERVED_TO_FILE_META, 1);
-//    void* header = storage->header_chunk->pointer;
-//    if (*(uint16_t*)header != FILE_HEADER_MAGIC_NUMBER) {
-//        panic("WRONG FILE PASSED INTO THE STORAGE", 4);
-//    }
-//    return storage;
+    Storage* storage = malloc(sizeof(Storage));
+    struct stat stat_buf;
+    // if file not exists
+    if (stat(filename, &stat_buf) < 0) {
+        create_new_storage(storage, filename);
+        return storage;
+    }
+    int fd = open(filename, O_RDWR);
+    storage->manager = init_memory_manager(fd);
+    storage->header_chunk = load_chunk(&storage->manager, 0, RESERVED_TO_FILE_META, 1);
+    if (get_header(storage)->magic_number != FILE_HEADER_MAGIC_NUMBER) {
+        panic("WRONG FILE PASSED INTO THE STORAGE", 6);
+    }
+    open_tables_table(storage);
+    open_scheme_table(storage);
+    return storage;
+}
+
+void free_storage(Storage* storage) {
+    close_table(storage, &storage->scheme_table);
+    close_table(storage, &storage->tables);
+    remove_chunk(&storage->manager, storage->header_chunk->id);
+    destroy_memory_manager(&storage->manager);
+    free(storage);
 }

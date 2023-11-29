@@ -32,17 +32,25 @@ TableScheme create_table_scheme(uint16_t fields_n) {
     return scheme;
 }
 
-void add_scheme_field(TableScheme* scheme, const char* name, TableDatatype type, uint8_t nullable) {
-    if (scheme->size >= scheme->capacity) {
-        panic("SCHEME CAPACITY LESS THAN SIZE", 3);
+void insert_scheme_field(TableScheme* scheme, const char* name, TableDatatype type,
+                         uint8_t nullable, uint16_t index) {
+    if (index >= scheme->capacity) {
+        panic("SCHEME CAPACITY LESS THAN INSERT INDEX", 3);
     }
-    SchemeItem* field = scheme->fields + scheme->size;
+    SchemeItem* field = scheme->fields + index;
     field->type = type;
     field->nullable = nullable;
     field->order = scheme->size;
     field->name = malloc(strlen(name));
     field->actual_size = table_field_type_sizes[type];
     strcpy(field->name, name);
+}
+
+void add_scheme_field(TableScheme* scheme, const char* name, TableDatatype type, uint8_t nullable) {
+    if (scheme->size >= scheme->capacity) {
+        panic("SCHEME CAPACITY LESS THAN SIZE", 3);
+    }
+    insert_scheme_field(scheme, name, type, nullable, scheme->size);
     scheme->size++;
 }
 
@@ -97,4 +105,38 @@ void free_scheme(SchemeItem* scheme, size_t length) {
 void destruct_table(Table* table) {
     free_scheme(table->fields, table->fields_n);
     free(table);
+}
+
+// PREDEFINED SCHEMES \/
+
+TableScheme get_table_of_tables_scheme() {
+    TableScheme scheme = create_table_scheme(7);
+    add_scheme_field(&scheme, "name", TABLE_FTYPE_CHARS, 0);
+    set_last_field_size(&scheme, 32);
+    add_scheme_field(&scheme, "table_id", TABLE_FTYPE_UINT_16, 0);
+    add_scheme_field(&scheme, "fields_n", TABLE_FTYPE_UINT_16, 0);
+    add_scheme_field(&scheme, "page_scale", TABLE_FTYPE_UINT_16, 0);
+    add_scheme_field(&scheme, "row_size", TABLE_FTYPE_UINT_32, 0);
+    add_scheme_field(&scheme, "first_free_pg", TABLE_FTYPE_UINT_32, 0);
+    add_scheme_field(&scheme, "first_full_pg", TABLE_FTYPE_UINT_32, 0);
+    return scheme;
+}
+
+TableScheme get_scheme_table_scheme() {
+    TableScheme scheme = create_table_scheme(5);
+    add_scheme_field(&scheme, "name", TABLE_FTYPE_STRING, 0);
+    add_scheme_field(&scheme, "type", TABLE_FTYPE_BYTE, 0);
+    add_scheme_field(&scheme, "nullable", TABLE_FTYPE_BOOL, 0);
+    add_scheme_field(&scheme, "order", TABLE_FTYPE_UINT_16, 0);
+    add_scheme_field(&scheme, "table_id", TABLE_FTYPE_UINT_16, 0);
+    return scheme;
+}
+
+TableScheme get_heap_table_scheme(uint32_t str_len) {
+    TableScheme scheme = create_table_scheme(3);
+    add_scheme_field(&scheme, "size", TABLE_FTYPE_UINT_16, 0);
+    add_scheme_field(&scheme, "data", TABLE_FTYPE_CHARS, 1);
+    set_last_field_size(&scheme, ((str_len / HEAP_ROW_SIZE_STEP) + 1) * HEAP_ROW_SIZE_STEP);
+    add_scheme_field(&scheme, "table_id", TABLE_FTYPE_UINT_16, 0);
+    return scheme;
 }

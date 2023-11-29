@@ -11,6 +11,9 @@
 //#define FIELD_NAME_MAX_SZ 32
 #define TABLE_MIN_ROWS_PER_PAGE 10
 
+#define HEAP_TABLES_NAME "#heap_table#"
+#define HEAP_ROW_SIZE_STEP 50
+
 typedef enum TableDatatype {
     TABLE_FTYPE_INT_32 = 1,
     TABLE_FTYPE_FLOAT = 2,
@@ -75,10 +78,16 @@ Table* init_table(const TableScheme* scheme, const char* name);
 
 TableScheme create_table_scheme(uint16_t fields_n);
 void add_scheme_field(TableScheme* scheme, const char* name, TableDatatype type, uint8_t nullable);
+void insert_scheme_field(TableScheme* scheme, const char* name, TableDatatype type,
+                         uint8_t nullable, uint16_t index);
 void set_last_field_size(TableScheme* scheme, uint32_t actual_size);
 void order_scheme_items(SchemeItem* array, size_t len);
 
 void free_scheme(SchemeItem* scheme, size_t length);
 void destruct_table(Table* table);
+
+TableScheme get_table_of_tables_scheme();
+TableScheme get_scheme_table_scheme();
+TableScheme get_heap_table_scheme(uint32_t str_len);
 
 #endif //LAB1_TABLE_H
