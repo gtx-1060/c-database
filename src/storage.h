@@ -67,6 +67,7 @@ void write_table(Storage* storage, Table * table, OpenedTable* dest);
 InsertRowResult table_insert_row(Storage* storage, const OpenedTable* table, void* array[]);
 void table_remove_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind);
 GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind);
+void table_replace_row(Storage* storage, const OpenedTable* table, uint32_t page_ind,uint32_t row_ind, void* array[]);
 
 void free_row_array(const OpenedTable* table, void** row);
 FileHeader* get_header(Storage* storage);

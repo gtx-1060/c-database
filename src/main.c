@@ -36,13 +36,28 @@ int main() {
     int32_t lower_bound = 500;
     request_iterator_add_filter(iterator, greater_filter, &lower_bound, "two");
     while (request_iterator_next(iterator) == REQUEST_ROW_FOUND) {
+        void* newrow[] = {NULL, NULL, "greater than 500"};
         f = *(float*)iterator->found[0];
         i = *(int32_t*)iterator->found[1];
         s = (char*)iterator->found[2];
-        request_iterator_remove_current(iterator);
+        printf("row: %f %d '%s'\n", f , i, s);
+        request_iterator_replace_current(iterator, newrow);
         counter++;
     }
-    printf("\n%u rows removed\n", counter);
+    printf("\n%u rows replaced\n", counter);
+    counter = 0;
+    request_iterator_free(iterator);
+
+    iterator = create_request_iterator(storage, &table);
+    while (request_iterator_next(iterator) == REQUEST_ROW_FOUND) {
+        f = *(float*)iterator->found[0];
+        i = *(int32_t*)iterator->found[1];
+        s = (char*)iterator->found[2];
+        if (i > 400)
+            printf("row: %f %d '%s'\n", f , i, s);
+        counter++;
+    }
+    printf("\n%u rows got\n", counter);
 
     request_iterator_free(iterator);
     close_table(storage, &table);

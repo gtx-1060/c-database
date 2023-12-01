@@ -136,7 +136,6 @@ void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
 void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void* array[]) {
     void* memory = malloc(table->mapped_addr->row_size);
     char* pointer = (char*)memory;
-    order_scheme_items(table->scheme, table->mapped_addr->fields_n);
     for (uint32_t i = 0; i < table->mapped_addr->fields_n; i++) {
         if (table->scheme[i].order != i) {
             panic("wrong scheme items order", 4);
@@ -203,8 +202,6 @@ GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t 
         return result;
     char* pointer = row.data;
     void** data = malloc(sizeof(void*)*table->mapped_addr->fields_n);
-    // todo move next line in scheme load
-    order_scheme_items(table->scheme, table->mapped_addr->fields_n);
     for (uint32_t i = 0; i < table->mapped_addr->fields_n; i++) {
         if (table->scheme[i].order != i) {
             panic("wrong scheme items order", 4);
@@ -237,13 +234,13 @@ GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t 
     return result;
 }
 
-void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_header, uint32_t pos_in_row) {
+void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_header, uint32_t offset_in_row) {
     // get row to take heap page index and row with string
     PageRow row = {.index = row_ind};
     read_row(&storage->manager, pg_header, &row);
     // get page and row of string
-    uint32_t str_page_ind = *(uint32_t*)((char*)row.data + pos_in_row);
-    uint32_t str_row_ind = *(uint32_t*)((char*)row.data + pos_in_row + sizeof(uint32_t));
+    uint32_t str_page_ind = *(uint32_t*)((char*)row.data + offset_in_row);
+    uint32_t str_row_ind = *(uint32_t*)((char*)row.data + offset_in_row + sizeof(uint32_t));
     free_row(&row);
     // get row with string and heap table id
     row.index = str_row_ind;
@@ -264,6 +261,7 @@ void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_heade
     OpenedTable heap_table;
     map_table(storage, iter, &heap_table);
     heap_table.scheme = get_heap_table_scheme(str_len).fields;
+    request_iterator_free(iter);
     table_remove_row(storage, &heap_table, str_page_ind, str_row_ind);
     close_table(storage, &heap_table);
 }
@@ -271,7 +269,6 @@ void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_heade
 void table_remove_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind) {
     PageMeta pg_header;
     read_page_meta(&storage->manager, page_ind, &pg_header);
-    order_scheme_items(table->scheme, table->mapped_addr->fields_n);
     uint32_t pointer = 0;
     for (uint32_t i = 0; i < table->mapped_addr->fields_n; i++) {
         if (table->scheme[i].type == TABLE_FTYPE_STRING) {
@@ -294,6 +291,31 @@ void table_remove_row(Storage* storage, const OpenedTable* table, uint32_t page_
             tlog(ROW_REMOVE, table->mapped_addr->name, pg_header.offset, row_ind);
             break;
     }
+}
+
+void table_replace_row(Storage* storage, const OpenedTable* table, uint32_t page_ind,
+                       uint32_t row_ind, void* array[]) {
+    PageMeta pg_header;
+    read_page_meta(&storage->manager, page_ind, &pg_header);
+    uint32_t pointer = 0;
+    for (uint32_t i = 0; i < table->mapped_addr->fields_n; i++) {
+        if (table->scheme[i].type == TABLE_FTYPE_STRING) {
+            remove_str_from_heap(storage, row_ind, &pg_header, pointer);
+        }
+        pointer += table->scheme[i].actual_size;
+    }
+    PageRow row = {.index = row_ind, .data = prepare_row_for_insertion(storage, table, array)};
+    switch (replace_row(&storage->manager, &pg_header, &row)) {
+        case WRITE_ROW_NOT_EMPTY:
+        case WRITE_BITMAP_ERROR:
+        case WRITE_ROW_OUT_OF_BOUND:
+            panic("WRONG REPLACE RECORD RESULT", 4);
+            break;
+        case WRITE_ROW_OK_BUT_FULL:
+        case WRITE_ROW_OK:
+            tlog(ROW_INSERT, table->mapped_addr->name, pg_header.offset, row_ind);
+    }
+    free(row.data);
 }
 
 uint8_t map_table(Storage* storage, RequestIterator* iter, OpenedTable* dest) {

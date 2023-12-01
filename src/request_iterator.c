@@ -93,25 +93,20 @@ void request_iterator_remove_current(RequestIterator* iter) {
     }
 }
 
+// you can pass NULL in the row, so that field keep its value
 void request_iterator_replace_current(RequestIterator* iter, void** row) {
-    if (iter->page_pointer == 0) {
+    if (iter->page_pointer == 0 || iter->found == NULL) {
         panic("ATTEMPT TO REPLACE ROW OF [0] PAGE WITH ITERATOR", 5);
     }
-    PageMeta pg_header;
-    PageRow pg_row = {
-            .index=iter->row_pointer-1,
-            .data=prepare_row_for_insertion(iter->storage, iter->table, row)
-    };
-    read_page_meta(&iter->storage->manager, iter->page_pointer, &pg_header);
-    RowWriteStatus result = replace_row(&iter->storage->manager, &pg_header, &pg_row);
-    if (result != WRITE_ROW_OK) {
-        panic("ERROR WHILE UPDATING ROW", 5);
+    for (uint32_t i = 0; i < iter->table->mapped_addr->fields_n; i++) {
+        if (row[i] == NULL) {
+            row[i] = iter->found[i];
+        }
     }
-    free(pg_row.data);
+    table_replace_row(iter->storage, iter->table, iter->page_pointer, iter->row_pointer-1, row);
 }
 
-// returns list of row scheme
-// delegates responsibility for
+// returns list of row scheme delegates responsibility for
 // freeing it to the caller
 void** request_iterator_take_found(RequestIterator* iter) {
     void** data = iter->found;

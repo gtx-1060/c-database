@@ -148,9 +148,11 @@ RowWriteStatus replace_row(MemoryManager* manager, const PageMeta* header, const
     if (row->index >= rows_number(header))
         return WRITE_ROW_OUT_OF_BOUND;
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
-    if(!is_row_empty(page, row->index))
+    // it may confuse, but it means row was empty
+    // -> so you couldn't replace it
+    if(is_row_empty(page, row->index))
         return WRITE_ROW_NOT_EMPTY;
-    memcpy(page+first_row_offset(header)+row->index, row->data, header->row_size);
+    memcpy(page+row_offset(header, row->index), row->data, header->row_size);
     return WRITE_ROW_OK;
 }
 
