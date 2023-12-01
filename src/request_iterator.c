@@ -70,9 +70,9 @@ RequestIteratorResult request_iterator_next(RequestIterator* iter) {
                 break;
             case READ_ROW_OUT_OF_BOUND:
                 iter->page_pointer = next_page_index(&iter->storage->manager, iter->page_pointer);
+                iter->row_pointer = 0;
                 if (iter->page_pointer == 0 && iter->source == TABLE_FREE_LIST) {
                     iter->source = TABLE_FULL_LIST;
-                    iter->row_pointer = 0;
                     iter->page_pointer = iter->table->mapped_addr->first_full_pg;
                 }
                 break;
@@ -88,6 +88,9 @@ void request_iterator_remove_current(RequestIterator* iter) {
         panic("ATTEMPT TO REMOVE ROW OF [0] PAGE WITH ITERATOR", 5);
     }
     table_remove_row(iter->storage, iter->table, iter->page_pointer, iter->row_pointer-1);
+    if (iter->source == TABLE_FULL_LIST) {
+        iter->source = TABLE_FREE_LIST;
+    }
 }
 
 void request_iterator_replace_current(RequestIterator* iter, void** row) {

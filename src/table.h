@@ -90,5 +90,6 @@ void destruct_table(Table* table);
 TableScheme get_table_of_tables_scheme();
 TableScheme get_scheme_table_scheme();
 TableScheme get_heap_table_scheme(uint32_t str_len);
+uint32_t get_nearest_heap_size(uint32_t str_len);
 
 #endif //LAB1_TABLE_H

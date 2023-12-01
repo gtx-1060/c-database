@@ -43,6 +43,7 @@ void read_page_meta(MemoryManager* manager, uint32_t offset, PageMeta* dest) {
     dest->scale = pointer->scale;
     dest->row_size = pointer->row_size;
     dest->next = pointer->next;
+    dest->prev = pointer->prev;
 }
 
 void write_page_meta(MemoryManager* manager, PageMeta* header) {
@@ -108,7 +109,7 @@ int8_t set_into_bitmap(uint8_t* page, uint32_t index, uint8_t value) {
         *bitmap_pointer = (*bitmap_pointer) | mask;
     } else {
         mask = ~mask;
-        *bitmap_pointer = (*bitmap_pointer) | mask;
+        *bitmap_pointer = (*bitmap_pointer) & mask;
     }
     return 1;
 }
@@ -173,7 +174,7 @@ RowRemoveStatus remove_row(MemoryManager* manager, const PageMeta* header, uint3
         return REMOVE_ROW_OUT_OF_BOUND;
     int64_t empty_row = find_empty_row(manager, header);
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
-    memset(page + first_row_offset(header) + row_ind, 0, header->row_size);
+    memset(page + row_offset(header, row_ind), 0, header->row_size);
     if(!set_into_bitmap(page, row_ind, 0))
         return REMOVE_BITMAP_ERROR;
     if (empty_row == -1)

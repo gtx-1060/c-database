@@ -105,14 +105,15 @@ PageMeta create_table_page(Storage* storage, const OpenedTable* table) {
 
 void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
     // we need heap_table with at least
-    // row_size > size(str_len) + size(table_id)
-    size_t lower_bound = str_len + sizeof(uint32_t);
+    // row_size >  + size(str_len) + size(str) + size(table_id)
+    size_t lower_bound = sizeof(uint16_t) + str_len + sizeof(uint16_t);
     size_t upper_bound = lower_bound+HEAP_ROW_SIZE_STEP;
     char* table_name = HEAP_TABLES_NAME;
     RequestIterator* iter = create_request_iterator(storage, &storage->tables);
     request_iterator_add_filter(iter, equals_filter, table_name, "name");
     request_iterator_add_filter(iter, greater_filter, &str_len, "row_size");
     request_iterator_add_filter(iter, less_filter, &upper_bound, "row_size");
+    // open heap table or if aren't create
     if (!map_table(storage, iter, heap_table)) {
         TableScheme scheme = get_heap_table_scheme(str_len);
         Table* table = init_table(&scheme, HEAP_TABLES_NAME);
@@ -130,7 +131,7 @@ void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
 }
 
 // take refs from array and write consistently into memory
-// do formatting and other additional if necessary
+// do formatting and additional if necessary
 // ALSO INSERT STRINGS INTO HEAP_TABLE!
 void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void* array[]) {
     void* memory = malloc(table->mapped_addr->row_size);
@@ -145,7 +146,7 @@ void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void
             OpenedTable heap_table = {0};
             uint16_t str_len = strlen(array[i])+1;
             get_heap_table(storage, &heap_table, str_len);
-            void* data[] = {&str_len, array[i], &table->mapped_addr->table_id};
+            void* data[] = {&str_len, array[i], &heap_table.mapped_addr->table_id};
             // insert string into table and close it
             InsertRowResult result = table_insert_row(storage, &heap_table, data);
             close_table(storage, &heap_table);
@@ -171,9 +172,9 @@ InsertRowResult table_insert_row(Storage* storage, const OpenedTable* table, voi
             panic("first free table page is still null", 4);
     }
 
-    PageMeta page_header;
-    read_page_meta(&storage->manager, table->mapped_addr->first_free_pg, &page_header);
-    RowWriteResult wresult = find_and_write_row(&storage->manager, &page_header, memory);
+    PageMeta pg_header;
+    read_page_meta(&storage->manager, table->mapped_addr->first_free_pg, &pg_header);
+    RowWriteResult wresult = find_and_write_row(&storage->manager, &pg_header, memory);
     free(memory);
     switch (wresult.status) {
         case WRITE_ROW_NOT_EMPTY:
@@ -182,20 +183,17 @@ InsertRowResult table_insert_row(Storage* storage, const OpenedTable* table, voi
             panic("WRONG INSERT RECORD RESULT", 4);
             break;
         case WRITE_ROW_OK_BUT_FULL:
-            move_page_to_full_list(storage, &page_header, table);
-            printf("[log] Record successfully added.     table='%s'      page=%u    [already full]\n",
-                   table->mapped_addr->name, page_header.offset);
+            move_page_to_full_list(storage, &pg_header, table);
+            tlog(ROW_INSERT_FULL, table->mapped_addr->name, pg_header.offset, wresult.row_id);
             break;
         case WRITE_ROW_OK:
-            printf("[log] Record successfully added.     table='%s'      page=%u\n",
-                   table->mapped_addr->name, page_header.offset);
+            tlog(ROW_INSERT, table->mapped_addr->name, pg_header.offset, wresult.row_id);
     }
-    InsertRowResult result = {.row_id = wresult.row_id, .page_id=page_header.offset};
+    InsertRowResult result = {.row_id = wresult.row_id, .page_id=pg_header.offset};
     return result;
 }
 
 GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind) {
-    void** data = malloc(sizeof(void*)*table->mapped_addr->fields_n);
     GetRowResult result = {0};
     PageRow row = {.index=row_ind};
     PageMeta page;
@@ -204,6 +202,7 @@ GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t 
     if (result.result != READ_ROW_OK)
         return result;
     char* pointer = row.data;
+    void** data = malloc(sizeof(void*)*table->mapped_addr->fields_n);
     // todo move next line in scheme load
     order_scheme_items(table->scheme, table->mapped_addr->fields_n);
     for (uint32_t i = 0; i < table->mapped_addr->fields_n; i++) {
@@ -238,13 +237,13 @@ GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t 
     return result;
 }
 
-void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_header, uint32_t pointer) {
+void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_header, uint32_t pos_in_row) {
     // get row to take heap page index and row with string
     PageRow row = {.index = row_ind};
     read_row(&storage->manager, pg_header, &row);
     // get page and row of string
-    uint32_t str_page_ind = *(uint32_t*)((char*)row.data + pointer);
-    uint32_t str_row_ind = *(uint32_t*)((char*)row.data + pointer + sizeof(uint32_t));
+    uint32_t str_page_ind = *(uint32_t*)((char*)row.data + pos_in_row);
+    uint32_t str_row_ind = *(uint32_t*)((char*)row.data + pos_in_row + sizeof(uint32_t));
     free_row(&row);
     // get row with string and heap table id
     row.index = str_row_ind;
@@ -254,8 +253,10 @@ void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_heade
         panic("CANT DELETE STRING", 4);
     }
     // str len to calculate offset from start row to table_id
-    uint16_t str_len = *(uint16_t*)row.data;
-    uint16_t table_id = *(uint16_t*)((char*)row.data + str_len + sizeof(uint16_t));
+    char* pointer = row.data;
+    uint16_t str_len = *(uint16_t*)pointer;
+    pointer += sizeof(uint16_t) + get_nearest_heap_size(str_len);
+    uint16_t table_id = *(uint16_t*)pointer;
     free_row(&row);
     // look for the heap table and remove row with string
     RequestIterator* iter = create_request_iterator(storage, &storage->tables);
@@ -287,12 +288,10 @@ void table_remove_row(Storage* storage, const OpenedTable* table, uint32_t page_
             break;
         case REMOVE_ROW_OK_PAGE_FREED:
             move_page_to_free_list(storage, &pg_header, table);
-            printf("[log] Record successfully removed at:\n  table %s\n  page %u\n  moved to free_list\n",
-                   table->mapped_addr->name, pg_header.offset);
+            tlog(ROW_REMOVE_FREED, table->mapped_addr->name, pg_header.offset, row_ind);
             break;
         case REMOVE_ROW_OK:
-            printf("[log] Record successfully removed at:\n  table %s\n  page %u\n",
-                   table->mapped_addr->name, pg_header.offset);
+            tlog(ROW_REMOVE, table->mapped_addr->name, pg_header.offset, row_ind);
             break;
     }
 }

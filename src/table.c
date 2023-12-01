@@ -136,7 +136,11 @@ TableScheme get_heap_table_scheme(uint32_t str_len) {
     TableScheme scheme = create_table_scheme(3);
     add_scheme_field(&scheme, "size", TABLE_FTYPE_UINT_16, 0);
     add_scheme_field(&scheme, "data", TABLE_FTYPE_CHARS, 1);
-    set_last_field_size(&scheme, ((str_len / HEAP_ROW_SIZE_STEP) + 1) * HEAP_ROW_SIZE_STEP);
+    set_last_field_size(&scheme, get_nearest_heap_size(str_len));
     add_scheme_field(&scheme, "table_id", TABLE_FTYPE_UINT_16, 0);
     return scheme;
+}
+
+uint32_t get_nearest_heap_size(uint32_t str_len) {
+    return ((str_len / HEAP_ROW_SIZE_STEP) + 1) * HEAP_ROW_SIZE_STEP;
 }

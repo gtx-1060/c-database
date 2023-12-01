@@ -30,9 +30,6 @@ typedef struct RequestIterator {
 //    filter_predicate predicate;
     const OpenedTable* table;
     Storage* storage;
-//    uint32_t field_ind;             // index of compared field in row
-//    void* value;                    // desired value
-//    SchemeItem* field;              // compared field
     RequestFilter* filters_list;
     uint32_t page_pointer;
     uint32_t row_pointer;
