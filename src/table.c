@@ -40,10 +40,9 @@ void insert_scheme_field(TableScheme* scheme, const char* name, TableDatatype ty
     SchemeItem* field = scheme->fields + index;
     field->type = type;
     field->nullable = nullable;
-    field->order = scheme->size;
-    field->name = malloc(strlen(name));
+    field->order = index;
+    field->name = strdup(name);
     field->actual_size = table_field_type_sizes[type];
-    strcpy(field->name, name);
 }
 
 void add_scheme_field(TableScheme* scheme, const char* name, TableDatatype type, uint8_t nullable) {
@@ -65,7 +64,7 @@ Table* init_table(const TableScheme* scheme, const char* name) {
     if (scheme->size != scheme->capacity)
         return NULL;
     Table* table = malloc(sizeof(Table));
-    strncpy(table->name, name, TABLE_NAME_MAX_SZ);
+    table->name = strdup(name);
     table->fields = scheme->fields;
     table->fields_n = scheme->capacity;
     table->row_size = 0;
@@ -94,9 +93,9 @@ void order_scheme_items(SchemeItem* array, size_t len) {
 }
 
 void free_scheme(SchemeItem* scheme, size_t length) {
-    for (SchemeItem* item = scheme; item < item+length; item++) {
-        if (item->name)
-            free(item->name);
+    for (uint32_t i = 0; i < length; i++) {
+        if (scheme[i].name)
+            free(scheme[i].name);
     }
     free(scheme);
 }
@@ -104,6 +103,7 @@ void free_scheme(SchemeItem* scheme, size_t length) {
 // free table memory with scheme
 void destruct_table(Table* table) {
     free_scheme(table->fields, table->fields_n);
+    free(table->name);
     free(table);
 }
 

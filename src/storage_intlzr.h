@@ -7,4 +7,8 @@
 
 #include "storage.h"
 
+
+Storage* init_storage(char* filename);
+void close_storage(Storage* storage);
+
 #endif //LAB1_STORAGE_INTLZR_H

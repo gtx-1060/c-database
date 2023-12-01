@@ -27,11 +27,11 @@ void request_iterator_add_filter(RequestIterator* iter, filter_predicate predica
             filter->value = value;
             filter->predicate = predicate;
             if (iter->filters_list == NULL) {
-                lst_init(filter->list);
+                lst_init(&filter->list);
                 iter->filters_list = filter;
                 return;
             }
-            lst_push(iter->filters_list->list, filter);
+            lst_push(&iter->filters_list->list, filter);
             return;
         }
     }
@@ -44,7 +44,7 @@ uint8_t check_filters(RequestIterator* iter, void* row[]) {
     do {
         if (!f->predicate(f->field, row, f->value))
             return 0;
-        f = (RequestFilter*)f->list->next;
+        f = (RequestFilter*)f->list.next;
     } while (f != iter->filters_list);
     return 1;
 }
@@ -120,9 +120,11 @@ void** request_iterator_take_found(RequestIterator* iter) {
 void request_iterator_free(RequestIterator* iter) {
     if (iter->found)
         free_row_array(iter->table, iter->found);
-    while (iter->filters_list->list->next != iter->filters_list->list) {
-        free(lst_pop(iter->filters_list->list));
+    while (iter->filters_list && iter->filters_list->list.next != &iter->filters_list->list) {
+        void* deleted = lst_pop(&iter->filters_list->list);
+        free((RequestFilter*)deleted);
     }
-    free(iter->filters_list);
+    if (iter->filters_list != NULL)
+        free(iter->filters_list);
     free(iter);
 }

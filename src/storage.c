@@ -74,8 +74,12 @@ void move_page_to_full_list(Storage* storage, PageMeta* page, const OpenedTable*
     if (find_empty_row(&storage->manager, page) != -1) {
         panic("ATTEMPT TO MOVE NOT FULL PAGE INTO FULL_LIST", 4);
     }
-    remove_from_table_list(storage, page, &table->mapped_addr->first_free_pg);
-    push_to_table_list(storage, page, &table->mapped_addr->first_full_pg);
+    uint32_t ffrp = table->mapped_addr->first_free_pg;
+    uint32_t ffup = table->mapped_addr->first_full_pg;
+    remove_from_table_list(storage, page, &ffrp);
+    table->mapped_addr->first_free_pg = ffrp;
+    push_to_table_list(storage, page, &ffup);
+    table->mapped_addr->first_full_pg = ffup;
 }
 
 void move_page_to_free_list(Storage* storage, PageMeta* page, const OpenedTable* table) {
@@ -83,13 +87,19 @@ void move_page_to_free_list(Storage* storage, PageMeta* page, const OpenedTable*
     if (find_empty_row(&storage->manager, page) == -1) {
         panic("ATTEMPT TO MOVE FULL PAGE INTO FREE_LIST", 4);
     }
-    remove_from_table_list(storage, page, &table->mapped_addr->first_full_pg);
-    push_to_table_list(storage, page, &table->mapped_addr->first_free_pg);
+    uint32_t ffrp = table->mapped_addr->first_free_pg;
+    uint32_t ffup = table->mapped_addr->first_full_pg;
+    remove_from_table_list(storage, page, &ffup);
+    table->mapped_addr->first_full_pg = ffup;
+    push_to_table_list(storage, page, &ffrp);
+    table->mapped_addr->first_free_pg = ffrp;
 }
 
 PageMeta create_table_page(Storage* storage, const OpenedTable* table) {
     PageMeta pg = storage_add_page(storage, table->mapped_addr->page_scale, table->mapped_addr->row_size);
-    push_to_table_list(storage, &pg, &table->mapped_addr->first_free_pg);
+    uint32_t ffrp = table->mapped_addr->first_free_pg;
+    push_to_table_list(storage, &pg, &ffrp);
+    table->mapped_addr->first_free_pg = ffrp;
     return pg;
 }
 
@@ -107,9 +117,10 @@ void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
         TableScheme scheme = get_heap_table_scheme(str_len);
         Table* table = init_table(&scheme, HEAP_TABLES_NAME);
         write_table(storage, table, heap_table);
-        heap_table->scheme = table->fields;
+        heap_table->scheme = scheme.fields;
         // do free instead of destruct_table(...) call
         // because we won't free scheme memory
+        free(table->name);
         free(table);
         request_iterator_free(iter);
         return;
@@ -132,7 +143,7 @@ void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void
         if (table->scheme[i].type == TABLE_FTYPE_STRING) {
             // create or load heap_table for string values
             OpenedTable heap_table = {0};
-            uint16_t str_len = strlen(array[i]);
+            uint16_t str_len = strlen(array[i])+1;
             get_heap_table(storage, &heap_table, str_len);
             void* data[] = {&str_len, array[i], &table->mapped_addr->table_id};
             // insert string into table and close it
@@ -172,14 +183,14 @@ InsertRowResult table_insert_row(Storage* storage, const OpenedTable* table, voi
             break;
         case WRITE_ROW_OK_BUT_FULL:
             move_page_to_full_list(storage, &page_header, table);
-            printf("[log] Record successfully added at:\n  table %s\n  page %u (already full)\n",
+            printf("[log] Record successfully added.     table='%s'      page=%u    [already full]\n",
                    table->mapped_addr->name, page_header.offset);
             break;
         case WRITE_ROW_OK:
-            printf("[log] Record successfully added at:\n  table %s\n  page %u\n",
+            printf("[log] Record successfully added.     table='%s'      page=%u\n",
                    table->mapped_addr->name, page_header.offset);
     }
-    InsertRowResult result = {.row_id = result.row_id, .page_id=page_header.offset};
+    InsertRowResult result = {.row_id = wresult.row_id, .page_id=page_header.offset};
     return result;
 }
 
@@ -192,7 +203,7 @@ GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t 
     result.result = read_row(&storage->manager, &page, &row);
     if (result.result != READ_ROW_OK)
         return result;
-    uint32_t pointer = 0;
+    char* pointer = row.data;
     // todo move next line in scheme load
     order_scheme_items(table->scheme, table->mapped_addr->fields_n);
     for (uint32_t i = 0; i < table->mapped_addr->fields_n; i++) {
@@ -201,24 +212,25 @@ GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t 
         }
         // handling variable length strings
         if (table->scheme[i].type == TABLE_FTYPE_STRING) {
-            uint32_t str_page_ind = *(uint32_t*)((char*)row.data + pointer);
+            uint32_t str_page_ind = *(uint32_t*)pointer;
             PageRow string_row = {
-                    .index = *(uint32_t*)((char*)row.data + pointer + sizeof(uint32_t))
+                    .index = *(uint32_t*)(pointer + sizeof(uint32_t))
             };
             read_page_meta(&storage->manager, str_page_ind, &page);
-            if (read_row(&storage->manager, &page, &string_row) != READ_ROW_OK) {
+            RowReadStatus s = read_row(&storage->manager, &page, &string_row);
+            if (s != READ_ROW_OK) {
                 printf("[log] Cant read string from heap table\n");
                 continue;
             }
             uint16_t str_len = *(uint16_t*)string_row.data;
             data[i] = malloc(str_len);
-            memcpy(data[i], (char*)string_row.data + sizeof(uint16_t), str_len);
+            memcpy(data[i], ((char*)string_row.data) + sizeof(uint16_t), str_len);
             pointer += table->scheme[i].actual_size;
             free_row(&string_row);
             continue;
         }
         data[i] = malloc(table->scheme[i].actual_size);
-        memcpy(data[i], (char*)row.data + pointer, table->scheme[i].actual_size);
+        memcpy(data[i], pointer, table->scheme[i].actual_size);
         pointer += table->scheme[i].actual_size;
     }
     free_row(&row);
@@ -246,7 +258,7 @@ void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_heade
     uint16_t table_id = *(uint16_t*)((char*)row.data + str_len + sizeof(uint16_t));
     free_row(&row);
     // look for the heap table and remove row with string
-    RequestIterator* iter = create_request_iterator(storage, storage->tables);
+    RequestIterator* iter = create_request_iterator(storage, &storage->tables);
     request_iterator_add_filter(iter, equals_filter, &table_id, "table_id");
     OpenedTable heap_table;
     map_table(storage, iter, &heap_table);
@@ -292,7 +304,10 @@ uint8_t map_table(Storage* storage, RequestIterator* iter, OpenedTable* dest) {
     }
     dest->chunk = load_chunk(&storage->manager, iter->page_pointer, 1, 1);
     dest->mapped_addr =
-            (TableRecord*)get_row_of_mapped_page(&storage->manager, dest->chunk, iter->row_pointer-1);
+            (TableRecord*) get_mapped_page_row(&storage->manager, dest->chunk, iter->row_pointer - 1);
+    if (dest->mapped_addr->row_size == 0) {
+        panic("MAPPED WRONG MEMORY! TABLE ROW IS NULL!", 4);
+    }
     return 1;
 }
 
@@ -312,6 +327,7 @@ uint8_t table_load_scheme(Storage* storage, OpenedTable* dest) {
                             *(uint8_t*)row[2], *(uint16_t*)row[3]);
     }
     request_iterator_free(iter);
+    dest->scheme = scheme.fields;
     return 1;
 }
 
@@ -347,11 +363,14 @@ void write_table(Storage* storage, Table * table, OpenedTable* dest) {
     get_header(storage)->tables_number++;
     dest->chunk = load_chunk(&storage->manager, result.page_id, 1, 1);
     dest->mapped_addr =
-            (TableRecord*)get_row_of_mapped_page(&storage->manager, dest->chunk, result.row_id);
+            (TableRecord*) get_mapped_page_row(&storage->manager, dest->chunk, result.row_id);
+    if (dest->mapped_addr->row_size == 0) {
+        panic("WRONG TABLE MAPPED", 4);
+    }
 }
 
-uint8_t write_table_scheme(Storage* storage, Table* table, uint16_t table_id) {
-    for (uint32_t i = 0; i < table->fields_n; i++) {
+void write_table_scheme(Storage* storage, Table* table, uint16_t table_id) {
+    for (uint16_t i = 0; i < table->fields_n; i++) {
         SchemeItem* field = table->fields+i;
         void* row[] = {field->name, &field->type, &field->nullable, &i, &table_id};
         table_insert_row(storage, &storage->scheme_table, row);

@@ -8,5 +8,5 @@ add_executable(lab1 src/main.c
         src/request_iterator.h src/request_iterator.c src/storage_intlzr.h src/storage_intlzr.c src/search_filters.h src/search_filters.c)
 
 # TO PERF PROFILE WORKS WELL
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -lm")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -lm")

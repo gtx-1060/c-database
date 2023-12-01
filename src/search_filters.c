@@ -36,9 +36,9 @@ int compare_field_value(SchemeItem* field, void** row, void* value) {
                 return -1;
             return (*(uint16_t*)value > *(uint16_t*)row[field->order]);
         case TABLE_FTYPE_STRING:
-            return (strcmp((char*)row[field->order], (char*)value) == 0);
+            return strcmp((char*)row[field->order], (char*)value);
         case TABLE_FTYPE_CHARS:
-            return (strncmp((char*)row[field->order], (char*)value, field->actual_size) == 0);
+            return strncmp((char*)row[field->order], (char*)value, field->actual_size);
         default:
             panic("CANT COMPARE THIS TYPE", 6);
     }

@@ -1,37 +1,34 @@
 #include <stdio.h>
-#include <stdint-gcc.h>
-#include <fcntl.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <memory.h>
-#include "mem_mapping.h"
+#include "storage_intlzr.h"
+#include "storage.h"
 
 int main() {
-    int fd;
-    struct stat filestat;
-    fd = open("/home/vlad/Documents/123", O_RDWR);
-    if (fd < 0)
-        exit(1);
-    if (fstat(fd, &filestat) < 0)
-        exit(2);
-
-//    uint8_t* pw = mem_map(0, filestat.st_size, PROT_READ, MAP_SHARED, fd, 0);
-
-//    printf("%ld", filestat.st_size);
-    int offset = 1;
-    uint8_t* pw = mem_map(0, filestat.st_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, offset);
-    uint8_t* pr = mem_map(0, filestat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    char* str = "\n<<CLOWN1 MESSAGE>>\n\0";
-    strcpy((char*)pr, str);
-    strcpy((char*)pw, str);
-    strcpy((char*)pr+1043, str);
-
-    if (pw == MAP_FAILED || pr == MAP_FAILED)
-        exit(3);
-    for (uint8_t* pp = pr; (int64_t)(pp - pr) < filestat.st_size; pp++) {
-        printf("%c", *pp);
+    Storage* storage = init_storage("/home/vlad/Music/db");
+    TableScheme scheme = create_table_scheme(3);
+    add_scheme_field(&scheme, "one", TABLE_FTYPE_FLOAT, 1);
+    add_scheme_field(&scheme, "two", TABLE_FTYPE_INT_32, 1);
+    add_scheme_field(&scheme, "three", TABLE_FTYPE_BYTE, 1);
+    Table* table = init_table(&scheme, "test_table");
+    OpenedTable open_table;
+    create_table(storage, table, &open_table);
+    destruct_table(table);
+    float f = 100;
+    char b = 'a';
+    int32_t i;
+    for (i = -500; i < 1000; i++) {
+        f -= 0.653f;
+        void* row[] = {&f, &i, &b};
+        table_insert_row(storage, &open_table, row);
     }
-    if (mem_unmap(pw, filestat.st_size) != 0 || mem_unmap(pr, filestat.st_size) != 0)
-        exit(4);
+    RequestIterator* iterator = create_request_iterator(storage, &open_table);
+    while (request_iterator_next(iterator) == REQUEST_ROW_FOUND) {
+        f = *(float*)iterator->found[0];
+        i = *(int32_t*)iterator->found[1];
+        b = *(char*)iterator->found[2];
+        printf("%f, %d, %c\n", f, i, b);
+    }
+    request_iterator_free(iterator);
+    close_table(storage, &open_table);
+    close_storage(storage);
     return 0;
 }

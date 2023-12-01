@@ -3,6 +3,7 @@
 //
 #include <stdio.h>
 #include <malloc.h>
+#include <fcntl.h>
 #include "defs.h"
 #include "mem_mapping.h"
 #include "util.h"
@@ -15,6 +16,8 @@ MemoryManager init_memory_manager(int fd) {
     manager.file_descriptor = fd;
     manager.chunks_n = 1;
     manager.chunk_list = malloc(sizeof(struct Chunk));
+    manager.chunk_list->pointer = NULL;
+    manager.chunk_list->manual_control = 0;
     lst_init(&manager.chunk_list->list);
     return manager;
 }
@@ -38,8 +41,9 @@ void realloc_chunk(MemoryManager* manager, Chunk *chunk, uint32_t new_offset, ui
     unmap_chunk(chunk);
     chunk->offset = new_offset;
     chunk->size = new_size;
-    chunk->pointer = mem_map(0, chunk->offset * SYS_PAGE_SIZE, PROT_READ || PROT_WRITE,
-                                     MAP_SHARED, manager->file_descriptor, new_offset);
+    posix_fallocate(manager->file_descriptor, new_offset * SYS_PAGE_SIZE, new_size * SYS_PAGE_SIZE);
+    chunk->pointer = mem_map(NULL, chunk->size * SYS_PAGE_SIZE, PROT_READ | PROT_WRITE,
+                                     MAP_SHARED, manager->file_descriptor, chunk->offset);
     if (chunk->pointer == MAP_FAILED) {
         panic("CANNOT MAP CHUNK", 1);
     }
@@ -53,8 +57,7 @@ void* get_chunk_pages(MemoryManager* manager, Chunk* chunk, uint32_t offset, uin
     if (chunk->manual_control) {
         panic("ATTEMPT TO GO OUT OF CHUNK BOUNDS!", 1);
     }
-    uint32_t size = (pages > DEFAULT_CHUNK_SIZE) ? pages : DEFAULT_CHUNK_SIZE;
-    realloc_chunk(manager, chunk, offset, size);
+    realloc_chunk(manager, chunk, offset, pages);
     return chunk->pointer;
 }
 
@@ -63,6 +66,7 @@ Chunk* load_chunk(MemoryManager* manager, uint32_t offset, uint32_t pages, uint8
     Chunk* chunk = malloc(sizeof(struct Chunk));
     chunk->manual_control = manual;
     chunk->id = manager->chunks_n++;
+    chunk->pointer = NULL;
     lst_init(&chunk->list);
     lst_push(&manager->chunk_list->list, chunk);
     realloc_chunk(manager, chunk, offset, pages);

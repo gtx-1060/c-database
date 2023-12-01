@@ -75,6 +75,6 @@ void free_row(PageRow* row);
 uint32_t next_page_index(MemoryManager* manager, uint32_t current_page);
 
 uint32_t row_offset(const PageMeta* header, uint32_t row_ind);
-void* get_row_of_mapped_page(MemoryManager* manager, Chunk* chunk, uint32_t row_ind);
+void* get_mapped_page_row(MemoryManager* manager, Chunk* chunk, uint32_t row_ind);
 
 #endif //LAB1_PAGE_H

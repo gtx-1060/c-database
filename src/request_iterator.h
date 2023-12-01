@@ -5,8 +5,12 @@
 #ifndef LAB1_REQUEST_ITERATOR_H
 #define LAB1_REQUEST_ITERATOR_H
 #include "defs.h"
+#include "table.h"
+#include "linked_list.h"
 #include "storage.h"
 
+typedef struct OpenedTable OpenedTable;
+typedef struct Storage Storage;
 typedef uint8_t (*filter_predicate)(SchemeItem* field, void* row[], void* value);
 
 typedef enum RequestIteratorResult {
@@ -16,7 +20,7 @@ typedef enum RequestIteratorResult {
 
 
 typedef struct RequestFilter {
-    List* list;
+    List list;
     filter_predicate predicate;
     void* value;
     SchemeItem* field;

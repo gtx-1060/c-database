@@ -3,8 +3,8 @@
 //
 
 #include <malloc.h>
-#include <math.h>
 #include <memory.h>
+#include <math.h>
 #include "page.h"
 #include "mem_mapping.h"
 #include "util.h"
@@ -22,7 +22,7 @@
 //    free(manager);
 //}
 
-void* get_row_of_mapped_page(MemoryManager* manager, Chunk* chunk, uint32_t row_ind) {
+void* get_mapped_page_row(MemoryManager* manager, Chunk* chunk, uint32_t row_ind) {
     PageMeta pg;
     read_page_meta(manager, chunk->offset, &pg);
     return (void*)((char*)chunk->pointer + row_offset(&pg, row_ind));
@@ -58,28 +58,32 @@ void write_page_meta(MemoryManager* manager, PageMeta* header) {
 
 // maybe it works, maybe not
 uint32_t rows_number(const PageMeta* header) {
-    return (uint32_t)floor((32768*(double)header->scale-80)/(8*(double)header->row_size+1));
+    // x = (pg_size - header_size - ceil(x/8)) / row_size
+    // x * (row_size + 0.125) = pg_size - header_size
+    // x = (pg_size - header_size) / (row_size + 0.125)
+    return (uint32_t)floor((double)(header->scale*SYS_PAGE_SIZE - sizeof(PageRecord)) / ((double)header->row_size+0.125));
 }
 
-uint32_t calc_header_size(uint32_t row_size) {
-    return sizeof(PageRecord) + (uint32_t)ceil(((double)row_size) / 8);
+uint32_t get_header_size(const PageMeta* header) {
+    return sizeof(PageRecord) + (uint32_t)ceil((double)rows_number(header) / 8);
 }
 
 // = page_size - page_header_size
 uint32_t page_actual_size(uint32_t row_size, uint16_t page_scale) {
-    return SYS_PAGE_SIZE*page_scale - calc_header_size(row_size);
+    PageMeta header = {.scale=page_scale, .row_size=row_size};
+    return SYS_PAGE_SIZE * page_scale - get_header_size(&header);
 }
 
 // offset from start of the page
 // to the first row of pointer
 uint32_t first_row_offset(const PageMeta* header) {
-    return calc_header_size(header->offset);
+    return get_header_size(header);
 }
 
 // offset from start of the page
 // to the first row of pointer
 uint32_t row_offset(const PageMeta* header, uint32_t row_ind) {
-    return first_row_offset(header)+row_ind*header->row_size;
+    return first_row_offset(header) + row_ind * header->row_size;
 }
 
 // return the offset for the next page
@@ -94,25 +98,23 @@ uint32_t create_page(MemoryManager* manager, const PageMeta* header) {
     return header->offset + header->scale;
 }
 
-// return -1, if the bit already has same value
-// return 0 if success
 int8_t set_into_bitmap(uint8_t* page, uint32_t index, uint8_t value) {
     uint8_t* bitmap_pointer = page + sizeof(PageRecord) + (index / 8);
     uint8_t mask = (uint8_t)pow(2, (7-index) % 8);
     uint8_t masked = mask & (*bitmap_pointer);
     if ((masked != 0 && value != 0) || (masked == 0 && value == 0))
-        return -1;
+        return 0;
     if (value == 1) {
         *bitmap_pointer = (*bitmap_pointer) | mask;
     } else {
         mask = ~mask;
         *bitmap_pointer = (*bitmap_pointer) | mask;
     }
-    return 0;
+    return 1;
 }
 
 uint8_t is_row_empty(const uint8_t* page, uint32_t row_index) {
-    return (*(page + sizeof(PageRecord) + (row_index / 8)) << (row_index % 8)) & 0b10000000;
+    return !((*(page + sizeof(PageRecord) + (row_index / 8)) << (row_index % 8)) & 0b10000000);
 }
 
 RowReadStatus read_row(MemoryManager* manager, const PageMeta* header, PageRow* dest) {
@@ -127,7 +129,7 @@ RowReadStatus read_row(MemoryManager* manager, const PageMeta* header, PageRow* 
     if (dest->data == NULL) {
         panic("CANNOT ALLOC MEM FOR ROW", 2);
     }
-    memcpy(dest->data, page+first_row_offset(header)+dest->index, header->row_size);
+    memcpy(dest->data, page + row_offset(header, dest->index), header->row_size);
     return READ_ROW_OK;
 }
 
@@ -158,9 +160,9 @@ RowWriteStatus write_row(MemoryManager* manager, const PageMeta* header, const P
     if (!is_row_empty(page, row->index)) {
         return WRITE_ROW_NOT_EMPTY;
     }
-    if(set_into_bitmap(page, row->index, 1) != 0 )
+    if(!set_into_bitmap(page, row->index, 1))
         return WRITE_BITMAP_ERROR;
-    memcpy(page+first_row_offset(header)+row->index, row->data, header->row_size);
+    memcpy(page+row_offset(header, row->index), row->data, header->row_size);
     if (find_empty_row(manager, header) == -1)                                          // TODO: may be optimised
         return WRITE_ROW_OK_BUT_FULL;
     return WRITE_ROW_OK;
@@ -172,7 +174,7 @@ RowRemoveStatus remove_row(MemoryManager* manager, const PageMeta* header, uint3
     int64_t empty_row = find_empty_row(manager, header);
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
     memset(page + first_row_offset(header) + row_ind, 0, header->row_size);
-    if(set_into_bitmap(page, row_ind, 0) != 0 )
+    if(!set_into_bitmap(page, row_ind, 0))
         return REMOVE_BITMAP_ERROR;
     if (empty_row == -1)
         return REMOVE_ROW_OK_PAGE_FREED;
@@ -183,12 +185,13 @@ RowRemoveStatus remove_row(MemoryManager* manager, const PageMeta* header, uint3
 int64_t find_empty_row(MemoryManager* manager, const PageMeta* header) {
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, 1);
     uint32_t rows = rows_number(header);
+
     uint32_t i = 0;
-    for (uint8_t* bitmap = page+ sizeof(PageRecord); bitmap < page + sizeof(PageRecord) + (rows / 8); bitmap++) {
+    for (uint8_t* bitmap = page + sizeof(PageRecord); bitmap < page + sizeof(PageRecord) + (rows / 8); bitmap++) {
         uint8_t mask = 0b10000000;
         uint8_t in_byte = 0;
         do {
-            if (((*bitmap) & mask) != 0)
+            if (((*bitmap) & mask) == 0)
                 return i+in_byte;
             in_byte++;
         } while ((mask >>= 1) != 0);

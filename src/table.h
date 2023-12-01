@@ -6,6 +6,7 @@
 #define LAB1_TABLE_H
 
 #include "defs.h"
+#include <stddef.h>
 
 #define TABLE_NAME_MAX_SZ 32
 //#define FIELD_NAME_MAX_SZ 32

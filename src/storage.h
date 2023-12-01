@@ -56,6 +56,8 @@ typedef struct InsertRowResult {
 // add table entity into the *tables* table
 //void write_table(Storage* storage, Table* table, OpenedTable* dest);
 
+typedef struct RequestIterator RequestIterator;
+
 // loads information about the table
 // permanently maps it into memory
 uint8_t map_table(Storage* storage, RequestIterator* iter, OpenedTable* dest);
@@ -70,6 +72,7 @@ void free_row_array(const OpenedTable* table, void** row);
 FileHeader* get_header(Storage* storage);
 PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size);
 
+void create_table(Storage* storage, Table* table, OpenedTable* dest);
 void close_table(Storage* storage, OpenedTable* table);
 
 //Table* get_all_tables(const MemoryManager* memory, uint16_t* number);
