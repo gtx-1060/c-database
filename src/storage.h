@@ -34,8 +34,8 @@ typedef struct Storage {
     MemoryManager manager;
     Chunk* header_chunk;
     OpenedTable tables;
-//    OpenedTable heaps_table;
     OpenedTable scheme_table;
+    OpenedTable free_page_table;
 } Storage;
 
 typedef struct FieldValue {

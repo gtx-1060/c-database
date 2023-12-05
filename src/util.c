@@ -8,6 +8,7 @@ char* log_phrases[] = {
         [ROW_INSERT] = "inserted",
         [ROW_REMOVE] = "removed",
         [ROW_REPLACE] = "replaced",
+        [ROW_REMOVE_NOT_FULL] = "removed; page not full",
         [ROW_REMOVE_FREED] = "removed; page freed",
         [ROW_INSERT_FULL] = "inserted; page moved to full"
 };

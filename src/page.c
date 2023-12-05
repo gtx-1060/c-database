@@ -62,11 +62,19 @@ uint32_t rows_number(const PageMeta* header) {
     // x = (pg_size - header_size - ceil(x/8)) / row_size
     // x * (row_size + 0.125) = pg_size - header_size
     // x = (pg_size - header_size) / (row_size + 0.125)
+    double sz_without_header = (double)(header->scale*SYS_PAGE_SIZE - sizeof(PageRecord));
+    double dwede = ((double)header->row_size+0.125);
+    double res = floor(sz_without_header / dwede);
     return (uint32_t)floor((double)(header->scale*SYS_PAGE_SIZE - sizeof(PageRecord)) / ((double)header->row_size+0.125));
 }
 
+uint32_t get_bitmap_size(const PageMeta* header) {
+    uint32_t rows = rows_number(header);
+    return (rows / 8) + (rows % 8 != 0);
+}
+
 uint32_t get_header_size(const PageMeta* header) {
-    return sizeof(PageRecord) + (uint32_t)ceil((double)rows_number(header) / 8);
+    return sizeof(PageRecord) + get_bitmap_size(header);
 }
 
 // = page_size - page_header_size
@@ -139,11 +147,6 @@ void free_row(PageRow* row) {
     row->data = NULL;
 }
 
-PageRow alloc_row(uint32_t size, uint32_t index) {
-    PageRow row = {.data=malloc(size), .index=index};
-    return row;
-}
-
 RowWriteStatus replace_row(MemoryManager* manager, const PageMeta* header, const PageRow* row) {
     if (row->index >= rows_number(header))
         return WRITE_ROW_OUT_OF_BOUND;
@@ -157,7 +160,8 @@ RowWriteStatus replace_row(MemoryManager* manager, const PageMeta* header, const
 }
 
 RowWriteStatus write_row(MemoryManager* manager, const PageMeta* header, const PageRow* row) {
-    if (row->index >= rows_number(header))
+    uint32_t rows = rows_number(header);
+    if (row->index >= rows)
         return WRITE_ROW_OUT_OF_BOUND;
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
     if (!is_row_empty(page, row->index)) {
@@ -171,6 +175,15 @@ RowWriteStatus write_row(MemoryManager* manager, const PageMeta* header, const P
     return WRITE_ROW_OK;
 }
 
+uint8_t is_page_empty(MemoryManager* manager, const PageMeta* header) {
+    uint8_t* page = (uint8_t*)get_pages(manager, header->offset, 1) + sizeof(PageRecord);
+    for (uint8_t* p = page; p < page + get_bitmap_size(header); p++) {
+        if (*p != 0)
+            return 0;
+    }
+    return 1;
+}
+
 RowRemoveStatus remove_row(MemoryManager* manager, const PageMeta* header, uint32_t row_ind) {
     if (row_ind >= rows_number(header))
         return REMOVE_ROW_OUT_OF_BOUND;
@@ -179,25 +192,26 @@ RowRemoveStatus remove_row(MemoryManager* manager, const PageMeta* header, uint3
     memset(page + row_offset(header, row_ind), 0, header->row_size);
     if(!set_into_bitmap(page, row_ind, 0))
         return REMOVE_BITMAP_ERROR;
-    if (empty_row == -1)
+    if (is_page_empty(manager, header))
         return REMOVE_ROW_OK_PAGE_FREED;
+    if (empty_row == -1)
+        return REMOVE_ROW_OK_PAGE_NOT_FULL;
     return REMOVE_ROW_OK;
 }
 
 // return -1 if not found
 int64_t find_empty_row(MemoryManager* manager, const PageMeta* header) {
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, 1);
-    uint32_t rows = rows_number(header);
-
+    uint32_t rows_n = rows_number(header);
     uint32_t i = 0;
-    for (uint8_t* bitmap = page + sizeof(PageRecord); bitmap < page + sizeof(PageRecord) + (rows / 8); bitmap++) {
+    for (uint8_t* bitmap = page + sizeof(PageRecord); bitmap < page+sizeof(PageRecord)+get_bitmap_size(header); bitmap++) {
         uint8_t mask = 0b10000000;
         uint8_t in_byte = 0;
         do {
             if (((*bitmap) & mask) == 0)
                 return i+in_byte;
             in_byte++;
-        } while ((mask >>= 1) != 0);
+        } while (((mask >>= 1) != 0) && (i+in_byte < rows_n));
         i += 8;
     }
     return -1;
@@ -207,6 +221,7 @@ RowWriteResult find_and_write_row(MemoryManager* manager, const PageMeta* header
     RowWriteResult result = {0};
     int64_t row_id = find_empty_row(manager, header);
     if (row_id == -1){
+        print_bitmap(manager, header->offset);
         result.status = WRITE_ROW_OUT_OF_BOUND;
         return result;
     }
@@ -218,4 +233,23 @@ RowWriteResult find_and_write_row(MemoryManager* manager, const PageMeta* header
 
 uint32_t next_page_index(MemoryManager* manager, uint32_t current_page) {
     return map_page_header(manager, current_page)->next;
+}
+
+void print_bitmap(MemoryManager* manager, uint32_t offset) {
+    PageMeta header;
+    read_page_meta(manager, offset, &header);
+    uint8_t* page = (uint8_t*) get_pages(manager, header.offset, 1);
+    uint32_t i = 0;
+    printf("bitmap full rows: [");
+    for (uint8_t* bitmap = page + sizeof(PageRecord); bitmap < page+sizeof(PageRecord)+get_bitmap_size(&header); bitmap++) {
+        uint8_t mask = 0b10000000;
+        uint8_t in_byte = 0;
+        do {
+            if (((*bitmap) & mask) != 0)
+                printf("%u, ", i+in_byte);
+            in_byte++;
+        } while ((mask >>= 1) != 0);
+        i += 8;
+    }
+    printf("]\n");
 }

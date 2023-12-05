@@ -15,22 +15,29 @@ FileHeader* get_header(Storage* storage) {
     return (FileHeader*)storage->header_chunk->pointer;
 }
 
-void destruct_storage(Storage* storage) {
-    destroy_memory_manager(&storage->manager);
-}
-
 PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size) {
-    FileHeader* header = get_header(storage);
+    uint32_t pi;
+    if (storage->free_page_table.mapped_addr) {
+        RequestIterator* iter = create_request_iterator(storage, &storage->free_page_table);
+        if (request_iterator_next(iter) == REQUEST_ROW_FOUND) {
+            pi = *(uint32_t*)iter->found[0];
+            request_iterator_remove_current(iter);
+        } else {
+            pi = get_header(storage)->pages_number++;
+        }
+        request_iterator_free(iter);
+    } else {
+        pi = get_header(storage)->pages_number++;
+    }
     PageMeta page = {
             .scale = scale,
             .row_size = row_size,
-            .offset = header->pages_number
+            .offset = pi
     };
     uint32_t next = create_page(&storage->manager, &page);
     if (next == 0) {
         panic("CANT CREATE NEW PAGE!", 4);
     }
-    header->pages_number = next;
     return page;
 }
 
@@ -156,6 +163,7 @@ void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void
             pointer += sizeof(uint32_t);
             continue;
         }
+        // TODO CHECK ITITIIT
         uint32_t field_sz = table->scheme[i].actual_size;
         memcpy(pointer, array[i], field_sz);
         pointer += field_sz;
@@ -266,6 +274,11 @@ void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_heade
     close_table(storage, &heap_table);
 }
 
+void insert_page_to_freed_table(Storage* storage, PageMeta* pg) {
+    void* row[] = {&pg->offset};
+    table_insert_row(storage, &storage->free_page_table, row);
+}
+
 void table_remove_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind) {
     PageMeta pg_header;
     read_page_meta(&storage->manager, page_ind, &pg_header);
@@ -277,16 +290,25 @@ void table_remove_row(Storage* storage, const OpenedTable* table, uint32_t page_
         pointer += table->scheme[i].actual_size;
     }
     RowRemoveStatus result = remove_row(&storage->manager, &pg_header, row_ind);
+    print_bitmap(&storage->manager, page_ind);
     switch (result) {
         case REMOVE_ROW_OUT_OF_BOUND:
         case REMOVE_BITMAP_ERROR:
         case REMOVE_ROW_EMPTY:
             panic("WRONG REMOVE RECORD RESULT", 4);
             break;
-        case REMOVE_ROW_OK_PAGE_FREED:
+        case REMOVE_ROW_OK_PAGE_NOT_FULL:
             move_page_to_free_list(storage, &pg_header, table);
+            tlog(ROW_REMOVE_NOT_FULL, table->mapped_addr->name, pg_header.offset, row_ind);
+            break;
+        case REMOVE_ROW_OK_PAGE_FREED: {
+            uint32_t pi = table->mapped_addr->first_free_pg;
+            remove_from_table_list(storage, &pg_header, &pi);
+            table->mapped_addr->first_free_pg = pi;
+            insert_page_to_freed_table(storage, &pg_header);
             tlog(ROW_REMOVE_FREED, table->mapped_addr->name, pg_header.offset, row_ind);
             break;
+        }
         case REMOVE_ROW_OK:
             tlog(ROW_REMOVE, table->mapped_addr->name, pg_header.offset, row_ind);
             break;

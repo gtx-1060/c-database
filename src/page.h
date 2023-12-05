@@ -49,6 +49,7 @@ typedef enum RowWriteStatus {
 
 typedef enum RowRemoveStatus {
     REMOVE_ROW_OK,
+    REMOVE_ROW_OK_PAGE_NOT_FULL,
     REMOVE_ROW_OK_PAGE_FREED,
     REMOVE_BITMAP_ERROR,
     REMOVE_ROW_EMPTY,
@@ -75,6 +76,7 @@ void free_row(PageRow* row);
 uint32_t next_page_index(MemoryManager* manager, uint32_t current_page);
 
 uint32_t row_offset(const PageMeta* header, uint32_t row_ind);
+void print_bitmap(MemoryManager* manager, uint32_t offset);
 void* get_mapped_page_row(MemoryManager* manager, Chunk* chunk, uint32_t row_ind);
 
 #endif //LAB1_PAGE_H
