@@ -48,6 +48,10 @@ uint8_t equals_filter(SchemeItem* field, void** row, void* value) {
     return compare_field_value(field, row, value) == 0;
 }
 
+uint8_t random_filter(SchemeItem* field, void** row, void* value) {
+    return (rand() % 3) == 0;
+}
+
 uint8_t greater_filter(SchemeItem* field, void** row, void* value) {
     return compare_field_value(field, row, value) == -1;
 }

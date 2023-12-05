@@ -400,6 +400,13 @@ void write_table_scheme(Storage* storage, Table* table, uint16_t table_id) {
 
 // create table and open it
 void create_table(Storage* storage, Table* table, OpenedTable* dest) {
+    RequestIterator* iter = create_request_iterator(storage, &storage->tables);
+    request_iterator_add_filter(iter, equals_filter, &table->fields, "name");
+    if (request_iterator_next(iter) == REQUEST_ROW_FOUND) {
+        request_iterator_free(iter);
+        return;
+    }
+    request_iterator_free(iter);
     write_table(storage, table, dest);
     write_table_scheme(storage, table, dest->mapped_addr->table_id);
     table_load_scheme(storage, dest);
@@ -410,9 +417,10 @@ void close_table(Storage* storage, OpenedTable* table) {
     remove_chunk(&storage->manager, table->chunk->id);
 }
 
-void free_row_array(const OpenedTable* table, void** row) {
-    for (uint32_t i = 0; i < table->mapped_addr->fields_n; i++) {
-        free(row[i]);
+void free_row_array(uint16_t fields, void** row) {
+    for (uint16_t i = 0; i < fields; i++) {
+        if (row[i] != NULL)
+            free(row[i]);
     }
     free(row);
 }

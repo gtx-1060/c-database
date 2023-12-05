@@ -58,11 +58,11 @@ RequestIteratorResult request_iterator_next(RequestIterator* iter) {
                 iter->row_pointer++;
                 if (check_filters(iter, row.data)) {
                     if (iter->found)
-                        free_row_array(iter->table, iter->found);
+                        free_row_array(iter->table->mapped_addr->fields_n, iter->found);
                     iter->found = row.data;
                     return REQUEST_ROW_FOUND;
                 } else {
-                    free_row_array(iter->table, row.data);
+                    free_row_array(iter->table->mapped_addr->fields_n, row.data);
                 }
                 break;
             case READ_ROW_IS_NULL:
@@ -117,7 +117,7 @@ void** request_iterator_take_found(RequestIterator* iter) {
 
 void request_iterator_free(RequestIterator* iter) {
     if (iter->found)
-        free_row_array(iter->table, iter->found);
+        free_row_array(iter->table->mapped_addr->fields_n, iter->found);
     while (iter->filters_list && iter->filters_list->list.next != &iter->filters_list->list) {
         void* deleted = lst_pop(&iter->filters_list->list);
         free((RequestFilter*)deleted);
@@ -126,3 +126,6 @@ void request_iterator_free(RequestIterator* iter) {
         free(iter->filters_list);
     free(iter);
 }
+
+
+
