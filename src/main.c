@@ -10,7 +10,7 @@
 void test_remove_and_read(Storage* storage, OpenedTable* table);
 
 int main() {
-    Storage* storage = init_storage("/home/vlad/Music/db");
+    Storage* storage = init_storage("D:\\db1");
     OpenedTable table1;
     float f = 200.042f;
     char* s = "table1 TWO record bitchhh";

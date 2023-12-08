@@ -12,7 +12,7 @@
 void write_table(Storage* storage, Table* table, OpenedTable* dest);
 
 FileHeader* get_header(Storage* storage) {
-    return (FileHeader*)storage->header_chunk->pointer;
+    return (FileHeader*)chunk_get_pointer(&storage->header_chunk);
 }
 
 PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size) {
@@ -345,9 +345,9 @@ uint8_t map_table(Storage* storage, RequestIterator* iter, OpenedTable* dest) {
     if (result == REQUEST_SEARCH_END) {
         return 0;
     }
-    dest->chunk = load_chunk(&storage->manager, iter->page_pointer, 1, 1);
+    dest->chunk = load_chunk(&storage->manager, iter->page_pointer, 1);
     dest->mapped_addr =
-            (TableRecord*) get_mapped_page_row(&storage->manager, dest->chunk, iter->row_pointer - 1);
+            (TableRecord*) get_mapped_page_row(&storage->manager, &dest->chunk, iter->row_pointer - 1);
     if (dest->mapped_addr->row_size == 0) {
         panic("MAPPED WRONG MEMORY! TABLE ROW IS NULL!", 4);
     }
@@ -404,9 +404,9 @@ void write_table(Storage* storage, Table * table, OpenedTable* dest) {
     };
     InsertRowResult result = table_insert_row(storage, &storage->tables, data);
     get_header(storage)->tables_number++;
-    dest->chunk = load_chunk(&storage->manager, result.page_id, 1, 1);
+    dest->chunk = load_chunk(&storage->manager, result.page_id, 1);
     dest->mapped_addr =
-            (TableRecord*) get_mapped_page_row(&storage->manager, dest->chunk, result.row_id);
+            (TableRecord*) get_mapped_page_row(&storage->manager, &dest->chunk, result.row_id);
     if (dest->mapped_addr->row_size == 0) {
         panic("WRONG TABLE MAPPED", 4);
     }
@@ -436,7 +436,7 @@ void create_table(Storage* storage, Table* table, OpenedTable* dest) {
 
 void close_table(Storage* storage, OpenedTable* table) {
     free_scheme(table->scheme, table->mapped_addr->fields_n);
-    remove_chunk(&storage->manager, table->chunk->id);
+    remove_chunk(&storage->manager, &table->chunk);
 }
 
 void free_row_array(uint16_t fields, void** row) {

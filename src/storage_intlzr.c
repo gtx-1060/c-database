@@ -67,7 +67,7 @@ void create_new_storage(Storage* storage, char* filename) {
         panic("cant create database file!", 6);
     }
     storage->manager = init_memory_manager(fd);
-    storage->header_chunk = load_chunk(&storage->manager, 0, RESERVED_TO_FILE_META, 1);
+    storage->header_chunk = load_chunk(&storage->manager, 0, RESERVED_TO_FILE_META);
     FileHeader* header = get_header(storage);
     header->magic_number = FILE_HEADER_MAGIC_NUMBER;
     header->pages_number = RESERVED_TO_FILE_META;
@@ -107,6 +107,7 @@ void open_scheme_table(Storage *storage) {
 
 Storage* init_storage(char* filename) {
     Storage* storage = malloc(sizeof(Storage));
+    storage->free_page_table.mapped_addr = NULL;
     struct stat stat_buf;
     // if file not exists
     if (stat(filename, &stat_buf) < 0) {
@@ -115,7 +116,7 @@ Storage* init_storage(char* filename) {
     }
     int fd = open(filename, O_RDWR);
     storage->manager = init_memory_manager(fd);
-    storage->header_chunk = load_chunk(&storage->manager, 0, RESERVED_TO_FILE_META, 1);
+    storage->header_chunk = load_chunk(&storage->manager, 0, RESERVED_TO_FILE_META);
     if (get_header(storage)->magic_number != FILE_HEADER_MAGIC_NUMBER) {
         panic("WRONG FILE PASSED INTO THE STORAGE", 6);
     }
@@ -128,7 +129,7 @@ Storage* init_storage(char* filename) {
 void close_storage(Storage* storage) {
     close_table(storage, &storage->scheme_table);
     close_table(storage, &storage->tables);
-    remove_chunk(&storage->manager, storage->header_chunk->id);
+    remove_chunk(&storage->manager, &storage->header_chunk);
     close(storage->manager.file_descriptor);
     destroy_memory_manager(&storage->manager);
     free(storage);

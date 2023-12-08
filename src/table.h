@@ -55,7 +55,7 @@ typedef struct Table {
 } Table;
 
 // struct for serialization/deserialization
-typedef struct __attribute__((__packed__)) TableRecord {
+typedef struct __attribute__((__packed__))TableRecord {
     char name[TABLE_NAME_MAX_SZ];
     uint16_t table_id;
     uint16_t fields_n;
@@ -64,16 +64,6 @@ typedef struct __attribute__((__packed__)) TableRecord {
     uint32_t first_free_pg;
     uint32_t first_full_pg;
 } TableRecord;
-
-typedef struct __attribute__((__packed__)) RowDataTableRecord {
-    char name[TABLE_NAME_MAX_SZ];
-    uint16_t table_id;
-    uint16_t fields_n;
-    uint16_t page_scale;
-    uint32_t row_size;
-    uint32_t first_free_pg;
-    uint32_t first_full_pg;
-} RowDataTableRecord;
 
 Table* init_table(const TableScheme* scheme, const char* name);
 

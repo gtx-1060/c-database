@@ -77,6 +77,6 @@ uint32_t next_page_index(MemoryManager* manager, uint32_t current_page);
 
 uint32_t row_offset(const PageMeta* header, uint32_t row_ind);
 void print_bitmap(MemoryManager* manager, uint32_t offset);
-void* get_mapped_page_row(MemoryManager* manager, Chunk* chunk, uint32_t row_ind);
+void* get_mapped_page_row(MemoryManager* manager, UserChunk* chunk, uint32_t row_ind);
 
 #endif //LAB1_PAGE_H

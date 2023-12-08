@@ -6,26 +6,12 @@
 #include <memory.h>
 #include <math.h>
 #include "page.h"
-#include "mem_mapping.h"
 #include "util.h"
 
-//PageManager* init_page_manager(int file_descriptor) {
-//    PageManager* manager = malloc(sizeof(PageManager));
-//    if (manager == NULL)
-//        ("Cannot create page manager", 2);
-//    manager->memory_manager = init_memory_manager(file_descriptor);
-//    return manager;
-//}
-//
-//void destruct_page_manager(PageManager* manager) {
-//    destroy_memory_manager(manager->memory_manager);
-//    free(manager);
-//}
-
-void* get_mapped_page_row(MemoryManager* manager, Chunk* chunk, uint32_t row_ind) {
+void* get_mapped_page_row(MemoryManager* manager, UserChunk* chunk, uint32_t row_ind) {
     PageMeta pg;
     read_page_meta(manager, chunk->offset, &pg);
-    return (void*)((char*)chunk->pointer + row_offset(&pg, row_ind));
+    return (void*)(chunk_get_pointer(chunk) + row_offset(&pg, row_ind));
 }
 
 // WARNING: when you call it twice or call get_pages()

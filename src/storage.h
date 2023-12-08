@@ -24,15 +24,14 @@ typedef struct FileHeader {
 } FileHeader;
 
 typedef struct OpenedTable {
-//    Table* table_meta;
     SchemeItem* scheme;
-    Chunk* chunk;
+    UserChunk chunk;
     TableRecord* mapped_addr;
 } OpenedTable;
 
 typedef struct Storage {
     MemoryManager manager;
-    Chunk* header_chunk;
+    UserChunk header_chunk;
     OpenedTable tables;
     OpenedTable scheme_table;
     OpenedTable free_page_table;
