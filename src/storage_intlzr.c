@@ -78,8 +78,9 @@ void create_new_storage(Storage* storage, char* filename) {
     open_tables_table(storage);
     create_scheme_table(storage);
 
-    TableScheme scheme = create_table_scheme(1);
+    TableScheme scheme = create_table_scheme(2);
     add_scheme_field(&scheme, "page_ind", TABLE_FTYPE_UINT_32, 0);
+    add_scheme_field(&scheme, "page_scale", TABLE_FTYPE_UINT_16, 0);
     Table* table = init_table(&scheme, "free_pages");
     create_table(storage, table, &storage->free_page_table);
     destruct_table(table);

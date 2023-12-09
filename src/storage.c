@@ -17,17 +17,20 @@ FileHeader* get_header(Storage* storage) {
 
 PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size) {
     uint32_t pi;
-    if (storage->free_page_table.mapped_addr) {
+    if (storage->free_page_table.mapped_addr && storage->free_page_table.scheme) {
         RequestIterator* iter = create_request_iterator(storage, &storage->free_page_table);
+        request_iterator_add_filter(iter, equals_filter, &scale, "page_scale");
         if (request_iterator_next(iter) == REQUEST_ROW_FOUND) {
             pi = *(uint32_t*)iter->found[0];
             request_iterator_remove_current(iter);
         } else {
-            pi = get_header(storage)->pages_number++;
+            pi = get_header(storage)->pages_number;
+            get_header(storage)->pages_number += scale;
         }
         request_iterator_free(iter);
     } else {
-        pi = get_header(storage)->pages_number++;
+        pi = get_header(storage)->pages_number;
+        get_header(storage)->pages_number += scale;
     }
     PageMeta page = {
             .scale = scale,
@@ -275,8 +278,11 @@ void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_heade
     close_table(storage, &heap_table);
 }
 
-void insert_page_to_freed_table(Storage* storage, PageMeta* pg) {
-    void* row[] = {&pg->offset};
+void handle_page_freed(Storage* storage, const OpenedTable* table, PageMeta* pg) {
+    uint32_t pi = table->mapped_addr->first_free_pg;
+    remove_from_table_list(storage, pg, &pi);
+    table->mapped_addr->first_free_pg = pi;
+    void* row[] = {&pg->offset, &pg->scale};
     table_insert_row(storage, &storage->free_page_table, row);
 }
 
@@ -291,7 +297,7 @@ void table_remove_row(Storage* storage, const OpenedTable* table, uint32_t page_
         pointer += table->scheme[i].actual_size;
     }
     RowRemoveStatus result = remove_row(&storage->manager, &pg_header, row_ind);
-    print_bitmap(&storage->manager, page_ind);
+//    print_bitmap(&storage->manager, page_ind);
     switch (result) {
         case REMOVE_ROW_OUT_OF_BOUND:
         case REMOVE_BITMAP_ERROR:
@@ -303,10 +309,7 @@ void table_remove_row(Storage* storage, const OpenedTable* table, uint32_t page_
             tlog(ROW_REMOVE_NOT_FULL, table->mapped_addr->name, pg_header.offset, row_ind);
             break;
         case REMOVE_ROW_OK_PAGE_FREED: {
-            uint32_t pi = table->mapped_addr->first_free_pg;
-            remove_from_table_list(storage, &pg_header, &pi);
-            table->mapped_addr->first_free_pg = pi;
-            insert_page_to_freed_table(storage, &pg_header);
+            handle_page_freed(storage, table, &pg_header);
             tlog(ROW_REMOVE_FREED, table->mapped_addr->name, pg_header.offset, row_ind);
             break;
         }

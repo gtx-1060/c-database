@@ -208,7 +208,7 @@ RowWriteResult find_and_write_row(MemoryManager* manager, const PageMeta* header
     RowWriteResult result = {0};
     int64_t row_id = find_empty_row(manager, header);
     if (row_id == -1){
-        print_bitmap(manager, header->offset);
+//        print_bitmap(manager, header->offset);
         result.status = WRITE_ROW_OUT_OF_BOUND;
         return result;
     }

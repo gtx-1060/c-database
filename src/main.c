@@ -14,18 +14,16 @@ int main() {
     OpenedTable table1;
     float f = 200.042f;
     char* s = "table1 TWO record bitchhh";
-    char* chars = "plain array";
     int32_t i;
     uint16_t ui = 123;
     uint32_t counter = 0;
 
-    if (!open_table(storage, "test_table4", &table1)) {
-        TableScheme scheme = create_table_scheme(5);
+    if (!open_table(storage, "test_table3", &table1)) {
+        TableScheme scheme = create_table_scheme(4);
         add_scheme_field(&scheme, "one", TABLE_FTYPE_FLOAT, 1);
         add_scheme_field(&scheme, "two", TABLE_FTYPE_INT_32, 1);
         add_scheme_field(&scheme, "three", TABLE_FTYPE_STRING, 1);
         add_scheme_field(&scheme, "four", TABLE_FTYPE_UINT_16, 1);
-        add_scheme_field(&scheme, "five", TABLE_FTYPE_CHARS, 1);
         set_last_field_size(&scheme, 12);
         Table* ttable = init_table(&scheme, "test_table4");
         create_table(storage, ttable, &table1);
@@ -33,26 +31,14 @@ int main() {
     }
     for (i = 0; i < 1000; i++) {
         f -= 0.653f;
-        void *row[] = {&f, &i, s, &ui, chars};
+        void *row[] = {&f, &i, s, &ui};
         table_insert_row(storage, &table1, row);
         counter++;
     }
     printf("\n%u rows wrote\n", counter);
     counter = 0;
 
-    RequestIterator* iterator = create_request_iterator(storage, &table1);
-    while (request_iterator_next(iterator) == REQUEST_ROW_FOUND) {
-        f = *(float*)iterator->found[0];
-        i = *(int32_t*)iterator->found[1];
-        s = (char*)iterator->found[2];
-        ui = *(uint32_t*)iterator->found[3];
-        char* cc = (char*)iterator->found[4];
-        if (i > 400)
-            printf("row: %f %d '%s' %u '%s'\n", f , i, s, ui, cc);
-        counter++;
-    }
-    printf("\n%u rows got\n", counter);
-    request_iterator_free(iterator);
+    test_remove_and_read(storage, &table1);
 
 //    test_remove_and_read(storage, &table1);
 //    printf("\n%u rows wrote\n", counter);
