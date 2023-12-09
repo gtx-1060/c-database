@@ -18,11 +18,12 @@
     #define mem_unmap(addr, length) !UnmapViewOfFile(addr)
 
 #elif defined(__unix__) || defined(__linux__)
-#define UNIX
-
 #include <unistd.h>
 #include "sys/mman.h"
 #include "linked_list.h"
+
+#define UNIX
+#define ALLOC_GRAN 16
 
 #define mem_unmap(addr, length) munmap(addr, length)
     #define resize_mapping(manager, offset, size) \
@@ -35,9 +36,6 @@
         mmap2(addr, length, prot, flags, fd, offset)
     #endif
 #endif
-
-typedef uint32_t chunk_id;
-
 
 typedef struct Chunk {
     struct List list;

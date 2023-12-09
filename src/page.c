@@ -11,7 +11,8 @@
 void* get_mapped_page_row(MemoryManager* manager, UserChunk* chunk, uint32_t row_ind) {
     PageMeta pg;
     read_page_meta(manager, chunk->offset, &pg);
-    return (void*)(chunk_get_pointer(chunk) + row_offset(&pg, row_ind));
+    char* p = chunk_get_pointer(chunk) + row_offset(&pg, row_ind);
+    return p;
 }
 
 // WARNING: when you call it twice or call get_pages()

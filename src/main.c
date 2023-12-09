@@ -10,7 +10,7 @@
 void test_remove_and_read(Storage* storage, OpenedTable* table);
 
 int main() {
-    Storage* storage = init_storage("D:\\db1");
+    Storage* storage = init_storage("/home/vlad/Music/db");
     OpenedTable table1;
     float f = 200.042f;
     char* s = "table1 TWO record bitchhh";
@@ -37,7 +37,24 @@ int main() {
         table_insert_row(storage, &table1, row);
         counter++;
     }
-    test_remove_and_read(storage, &table1);
+    printf("\n%u rows wrote\n", counter);
+    counter = 0;
+
+    RequestIterator* iterator = create_request_iterator(storage, &table1);
+    while (request_iterator_next(iterator) == REQUEST_ROW_FOUND) {
+        f = *(float*)iterator->found[0];
+        i = *(int32_t*)iterator->found[1];
+        s = (char*)iterator->found[2];
+        ui = *(uint32_t*)iterator->found[3];
+        char* cc = (char*)iterator->found[4];
+        if (i > 400)
+            printf("row: %f %d '%s' %u '%s'\n", f , i, s, ui, cc);
+        counter++;
+    }
+    printf("\n%u rows got\n", counter);
+    request_iterator_free(iterator);
+
+//    test_remove_and_read(storage, &table1);
 //    printf("\n%u rows wrote\n", counter);
 //    open_table(storage, "test_table4", &table2);
 //    Join* join = join_tables(storage, &table1, &table2, "two");
@@ -81,8 +98,8 @@ void test_remove_and_read(Storage* storage, OpenedTable* table) {
         f = *(float*)iterator->found[0];
         i = *(int32_t*)iterator->found[1];
         s = (char*)iterator->found[2];
-//        if (i > 400)
-//            printf("row: %f %d '%s'\n", f , i, s);
+        if (i > 400)
+            printf("row: %f %d '%s'\n", f , i, s);
         counter++;
     }
     printf("\n%u rows got\n", counter);

@@ -205,6 +205,7 @@ GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t 
     PageRow row = {.index=row_ind};
     PageMeta page;
     read_page_meta(&storage->manager, page_ind, &page);
+
     result.result = read_row(&storage->manager, &page, &row);
     if (result.result != READ_ROW_OK)
         return result;
@@ -345,6 +346,7 @@ uint8_t map_table(Storage* storage, RequestIterator* iter, OpenedTable* dest) {
     if (result == REQUEST_SEARCH_END) {
         return 0;
     }
+
     dest->chunk = load_chunk(&storage->manager, iter->page_pointer, 1);
     dest->mapped_addr =
             (TableRecord*) get_mapped_page_row(&storage->manager, &dest->chunk, iter->row_pointer - 1);

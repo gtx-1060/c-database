@@ -7,7 +7,9 @@
 #include "mem_mapping.h"
 #include "util.h"
 
+
 void unmap_chunk(Chunk* chunk);
+void free_chunk(Chunk* chunk);
 
 #if defined(WIN) && !defined(resize_mapping)
 
@@ -62,17 +64,18 @@ void unmap_chunk(Chunk* chunk);
 
 MemoryManager init_memory_manager(int fd) {
     MemoryManager manager;
+    manager.file_size = 0;
     manager.file_descriptor = fd;
     manager.win_map_handle = NULL;
     manager.chunks_ind = 1;
+
     manager.chunk_list = malloc(sizeof(struct Chunk));
     manager.chunk_list->pointer = NULL;
     manager.chunk_list->offset = 0;
     manager.chunk_list->size = 0;
+    manager.chunk_list->refs = 1;
     manager.chunk_list->id = manager.chunks_ind++;
-    manager.file_size = 0;
     lst_init(&manager.chunk_list->list);
-
     manager.last_used = NULL;
 
 #ifdef WIN
@@ -80,17 +83,16 @@ MemoryManager init_memory_manager(int fd) {
     GetSystemInfo(&inf);
     manager.alloc_gran = inf.dwAllocationGranularity / SYS_PAGE_SIZE;
 #else
-    manager.alloc_gran = 16;
+    manager.alloc_gran = ALLOC_GRAN;
 #endif
-
 
     return manager;
 }
 
 void destroy_memory_manager(MemoryManager* manager) {
     while (!lst_empty(&manager->chunk_list->list)) {
-        UserChunk* chunk = (UserChunk*) manager->chunk_list->list.next;
-        remove_chunk(manager, chunk);
+        Chunk* chunk = (Chunk*)manager->chunk_list->list.next;
+        free_chunk(chunk);
     }
     unmap_chunk(manager->chunk_list);
     free(manager->chunk_list);
@@ -109,8 +111,8 @@ void realloc_chunk(MemoryManager* manager, Chunk *chunk, uint32_t new_offset, ui
     chunk->size = (new_size / manager->alloc_gran + 1) * manager->alloc_gran;
     chunk->offset = (new_offset / manager->alloc_gran) * manager->alloc_gran;
     #ifdef UNIX
-    posix_fallocate(manager->file_descriptor, 0, new_file_size*SYS_PAGE_SIZE);
-    chunk->pointer = (void*)mem_map(NULL, chunk->size * SYS_PAGE_SIZE, manager->file_descriptor, chunk->offset);
+    posix_fallocate(manager->file_descriptor, 0, need_file_size*SYS_PAGE_SIZE);
+    chunk->pointer = (void*)mem_map(NULL, chunk->size, manager->file_descriptor, chunk->offset);
     #endif
     #ifdef WIN
     if (manager->file_size < need_file_size) {
@@ -118,9 +120,12 @@ void realloc_chunk(MemoryManager* manager, Chunk *chunk, uint32_t new_offset, ui
         manager->file_size = need_file_size;
     }
     chunk->pointer = mem_map(NULL, chunk->size, manager->win_map_handle, chunk->offset);
-    #endif
     if (chunk->pointer == MAP_FAILED) {
         printf("winerr: %lu\n", GetLastError());
+        panic("CANNOT MAP CHUNK", 1);
+    }
+    #endif
+    if (chunk->pointer == MAP_FAILED) {
         panic("CANNOT MAP CHUNK", 1);
     }
 }
@@ -179,7 +184,7 @@ void* get_pages(MemoryManager* manager, uint32_t offset, uint32_t pages) {
         free_chunk(manager->last_used);
     }
     manager->last_used = get_chunk_with(manager, offset, pages);
-    return ((char*)manager->last_used) + (offset - manager->last_used->offset) * SYS_PAGE_SIZE;
+    return ((char*)manager->last_used->pointer) + (offset - manager->last_used->offset) * SYS_PAGE_SIZE;
 }
 
 char* chunk_get_pointer(UserChunk* chunk) {
