@@ -109,6 +109,7 @@ void open_scheme_table(Storage *storage) {
 Storage* init_storage(char* filename) {
     Storage* storage = malloc(sizeof(Storage));
     storage->free_page_table.mapped_addr = NULL;
+    storage->free_page_table.scheme = NULL;
     struct stat stat_buf;
     // if file not exists
     if (stat(filename, &stat_buf) < 0) {
