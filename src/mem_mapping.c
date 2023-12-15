@@ -108,8 +108,8 @@ void unmap_chunk(Chunk* chunk) {
 void realloc_chunk(MemoryManager* manager, Chunk *chunk, uint32_t new_offset, uint32_t new_size) {
     unmap_chunk(chunk);
     uint32_t need_file_size = ((new_size+new_offset) / manager->alloc_gran + 1) * manager->alloc_gran;
-    chunk->size = (new_size / manager->alloc_gran + 1) * manager->alloc_gran;
     chunk->offset = (new_offset / manager->alloc_gran) * manager->alloc_gran;
+    chunk->size = ((new_size+(new_offset-chunk->offset)) / manager->alloc_gran + 1) * manager->alloc_gran;
     #ifdef UNIX
     posix_fallocate(manager->file_descriptor, 0, need_file_size*SYS_PAGE_SIZE);
     chunk->pointer = (void*)mem_map(NULL, chunk->size, manager->file_descriptor, chunk->offset);

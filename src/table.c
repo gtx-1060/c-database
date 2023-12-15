@@ -42,7 +42,7 @@ void insert_scheme_field(TableScheme* scheme, const char* name, TableDatatype ty
     field->nullable = nullable;
     field->order = index;
     field->name = strdup(name);
-    field->actual_size = table_field_type_sizes[type];
+    field->max_sz = table_field_type_sizes[type];
 }
 
 void add_scheme_field(TableScheme* scheme, const char* name, TableDatatype type, uint8_t nullable) {
@@ -53,11 +53,11 @@ void add_scheme_field(TableScheme* scheme, const char* name, TableDatatype type,
     scheme->size++;
 }
 
-void set_last_field_size(TableScheme* scheme, uint32_t actual_size) {
+void set_last_field_size(TableScheme* scheme, uint16_t actual_size) {
     if (scheme->size == 0) {
         panic("SCHEME SIZE IS 0, BUT ATTEMPT TO SET SIZE OF FIELD",3);
     }
-    scheme->fields[scheme->size-1].actual_size = actual_size;
+    scheme->fields[scheme->size-1].max_sz = actual_size;
 }
 
 Table* init_table(const TableScheme* scheme, const char* name) {
@@ -71,7 +71,7 @@ Table* init_table(const TableScheme* scheme, const char* name) {
     for (SchemeItem* field = table->fields; field < table->fields + table->fields_n; field++) {
         if  (field->type == 0 || strlen(field->name) == 0)
             panic("INCORRECT SCHEME DATA", 3);          // TODO: USE OPERATION STATUS INSTEAD OF PANIC
-        table->row_size += field->actual_size;
+        table->row_size += field->max_sz;
     }
     uint16_t scale;
     for (scale = 1; page_actual_size(table->row_size, scale)
@@ -141,6 +141,6 @@ TableScheme get_heap_table_scheme(uint32_t str_len) {
     return scheme;
 }
 
-uint32_t get_nearest_heap_size(uint32_t str_len) {
+uint16_t get_nearest_heap_size(uint32_t str_len) {
     return ((str_len / HEAP_ROW_SIZE_STEP) + 1) * HEAP_ROW_SIZE_STEP;
 }

@@ -124,12 +124,15 @@ Storage* init_storage(char* filename) {
     }
     open_tables_table(storage);
     open_scheme_table(storage);
-    open_table(storage, "free_pages", &storage->free_page_table);
+    if (storage->free_page_table.mapped_addr == NULL) {
+        open_table(storage, "free_pages", &storage->free_page_table);
+    }
     return storage;
 }
 
 void close_storage(Storage* storage) {
     close_table(storage, &storage->scheme_table);
+    close_table(storage, &storage->free_page_table);
     close_table(storage, &storage->tables);
     remove_chunk(&storage->manager, &storage->header_chunk);
     close(storage->manager.file_descriptor);

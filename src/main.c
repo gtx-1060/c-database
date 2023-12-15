@@ -9,11 +9,12 @@
 
 void test_remove_and_read(Storage* storage, OpenedTable* table);
 
+static char* s = " bitchhh table1 table1 TWO record bitchhh table1 table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 table1 TWO record bitchhh table1 table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1";
+
 int main() {
     Storage* storage = init_storage("/home/vlad/Music/db");
     OpenedTable table1;
     float f = 200.042f;
-    char* s = "table1 TWO record bitchhh";
     int32_t i;
     uint16_t ui = 123;
     uint32_t counter = 0;
@@ -24,21 +25,22 @@ int main() {
         add_scheme_field(&scheme, "two", TABLE_FTYPE_INT_32, 1);
         add_scheme_field(&scheme, "three", TABLE_FTYPE_STRING, 1);
         add_scheme_field(&scheme, "four", TABLE_FTYPE_UINT_16, 1);
-        set_last_field_size(&scheme, 12);
-        Table* ttable = init_table(&scheme, "test_table4");
+        Table* ttable = init_table(&scheme, "test_table3");
         create_table(storage, ttable, &table1);
         destruct_table(ttable);
     }
+
+    test_remove_and_read(storage, &table1);
+
     for (i = 0; i < 1000; i++) {
         f -= 0.653f;
         void *row[] = {&f, &i, s, &ui};
+//        printf( " i= %u ", i);
         table_insert_row(storage, &table1, row);
         counter++;
     }
     printf("\n%u rows wrote\n", counter);
     counter = 0;
-
-    test_remove_and_read(storage, &table1);
 
 //    test_remove_and_read(storage, &table1);
 //    printf("\n%u rows wrote\n", counter);
@@ -64,13 +66,13 @@ void test_remove_and_read(Storage* storage, OpenedTable* table) {
     RequestIterator* iterator = create_request_iterator(storage, table);
     int32_t lower_bound = 0;
     float f;
-    char* s;
+    char* ss;
     int32_t i;
 //    request_iterator_add_filter(iterator, greater_filter, &lower_bound, "two");
-    while (request_iterator_next(iterator) == REQUEST_ROW_FOUND) {
+    while (request_iterator_next(iterator) == REQUEST_ROW_FOUND && counter < 2000) {
         f = *(float*)iterator->found[0];
         i = *(int32_t*)iterator->found[1];
-        s = (char*)iterator->found[2];
+        ss = (char*)iterator->found[2];
 //        printf("row: %f %d '%s'\n", f , i, s);
         request_iterator_remove_current(iterator);
         counter++;
@@ -83,9 +85,9 @@ void test_remove_and_read(Storage* storage, OpenedTable* table) {
     while (request_iterator_next(iterator) == REQUEST_ROW_FOUND) {
         f = *(float*)iterator->found[0];
         i = *(int32_t*)iterator->found[1];
-        s = (char*)iterator->found[2];
+        ss = (char*)iterator->found[2];
         if (i > 400)
-            printf("row: %f %d '%s'\n", f , i, s);
+            printf("row: %f %d '%s'\n", f , i, ss);
         counter++;
     }
     printf("\n%u rows got\n", counter);

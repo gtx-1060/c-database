@@ -27,17 +27,13 @@ typedef enum TableDatatype {
     TABLE_FTYPE_UINT_16 = 9,
 } TableDatatype;
 
-typedef enum TableTypes {
-    TABLE_TYPE_DATA = 0,
-    TABLE_TYPE_ROWDATA = 1,
-} TableTypes;
-
 typedef struct SchemeItem {
     char* name;
     TableDatatype type;
-    uint8_t actual_size;
     uint16_t order;
     uint8_t nullable;
+    uint16_t max_sz;
+//    uint16_t actual_sz;     // uses only for TABLE_FTYPE_CHARS
 } SchemeItem;
 
 typedef struct TableScheme {
@@ -71,7 +67,7 @@ TableScheme create_table_scheme(uint16_t fields_n);
 void add_scheme_field(TableScheme* scheme, const char* name, TableDatatype type, uint8_t nullable);
 void insert_scheme_field(TableScheme* scheme, const char* name, TableDatatype type,
                          uint8_t nullable, uint16_t index);
-void set_last_field_size(TableScheme* scheme, uint32_t actual_size);
+void set_last_field_size(TableScheme* scheme, uint16_t actual_size);
 void order_scheme_items(SchemeItem* array, size_t len);
 
 void free_scheme(SchemeItem* scheme, size_t length);
@@ -80,6 +76,6 @@ void destruct_table(Table* table);
 TableScheme get_table_of_tables_scheme();
 TableScheme get_scheme_table_scheme();
 TableScheme get_heap_table_scheme(uint32_t str_len);
-uint32_t get_nearest_heap_size(uint32_t str_len);
+uint16_t get_nearest_heap_size(uint32_t str_len);
 
 #endif //LAB1_TABLE_H

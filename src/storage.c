@@ -153,7 +153,7 @@ void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void
         if (table->scheme[i].type == TABLE_FTYPE_STRING) {
             // create or load heap_table for string values
             OpenedTable heap_table = {0};
-            uint16_t str_len = strlen(array[i])+1;
+            uint16_t str_len = strlen((char*)array[i])+1;
             get_heap_table(storage, &heap_table, str_len);
             void* data[] = {&str_len, array[i], &heap_table.mapped_addr->table_id};
             // insert string into table and close it
@@ -166,9 +166,13 @@ void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void
             pointer += sizeof(uint32_t);
             continue;
         }
-        // TODO CHECK ITITIIT
-        uint32_t field_sz = table->scheme[i].actual_size;
-        memcpy(pointer, array[i], field_sz);
+
+        uint16_t field_sz = table->scheme[i].max_sz;
+        if (table->scheme[i].type == TABLE_FTYPE_CHARS) {
+            memcpy(pointer, array[i], strlen(array[i])+1);
+        } else {
+            memcpy(pointer, array[i], field_sz);
+        }
         pointer += field_sz;
     }
     return memory;
@@ -233,13 +237,13 @@ GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t 
             uint16_t str_len = *(uint16_t*)string_row.data;
             data[i] = malloc(str_len);
             memcpy(data[i], ((char*)string_row.data) + sizeof(uint16_t), str_len);
-            pointer += table->scheme[i].actual_size;
+            pointer += table->scheme[i].max_sz;
             free_row(&string_row);
             continue;
         }
-        data[i] = malloc(table->scheme[i].actual_size);
-        memcpy(data[i], pointer, table->scheme[i].actual_size);
-        pointer += table->scheme[i].actual_size;
+        data[i] = malloc(table->scheme[i].max_sz);
+        memcpy(data[i], pointer, table->scheme[i].max_sz);
+        pointer += table->scheme[i].max_sz;
     }
     free_row(&row);
     result.data = data;
@@ -294,7 +298,7 @@ void table_remove_row(Storage* storage, const OpenedTable* table, uint32_t page_
         if (table->scheme[i].type == TABLE_FTYPE_STRING) {
             remove_str_from_heap(storage, row_ind, &pg_header, pointer);
         }
-        pointer += table->scheme[i].actual_size;
+        pointer += table->scheme[i].max_sz;
     }
     RowRemoveStatus result = remove_row(&storage->manager, &pg_header, row_ind);
 //    print_bitmap(&storage->manager, page_ind);
@@ -328,7 +332,7 @@ void table_replace_row(Storage* storage, const OpenedTable* table, uint32_t page
         if (table->scheme[i].type == TABLE_FTYPE_STRING) {
             remove_str_from_heap(storage, row_ind, &pg_header, pointer);
         }
-        pointer += table->scheme[i].actual_size;
+        pointer += table->scheme[i].max_sz;
     }
     PageRow row = {.index = row_ind, .data = prepare_row_for_insertion(storage, table, array)};
     switch (replace_row(&storage->manager, &pg_header, &row)) {
@@ -368,6 +372,7 @@ uint8_t table_load_scheme(Storage* storage, OpenedTable* dest) {
     for (uint32_t i = 0; i < dest->mapped_addr->fields_n; i++) {
         if (request_iterator_next(iter) == REQUEST_SEARCH_END) {
             request_iterator_free(iter);
+            free_scheme(scheme.fields, dest->mapped_addr->fields_n);
             return 0;
         }
         void** row = iter->found;
