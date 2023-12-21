@@ -8,7 +8,7 @@
 #include "mem_mapping.h"
 #include "table.h"
 #include "page.h"
-#include "request_iterator.h"
+#include "rows_iterator.h"
 
 #define RESERVED_TO_FILE_META 2
 #define FILE_HEADER_MAGIC_NUMBER 0x7F38
@@ -55,11 +55,11 @@ typedef struct InsertRowResult {
 // add table entity into the *tables* table
 //void write_table(Storage* storage, Table* table, OpenedTable* dest);
 
-typedef struct RequestIterator RequestIterator;
+typedef struct RowsIterator RequestIterator;
 
 // loads information about the table
 // permanently maps it into memory
-uint8_t map_table(Storage* storage, RequestIterator* iter, OpenedTable* dest);
+uint8_t map_table(Storage* storage, RowsIterator* iter, OpenedTable* dest);
 void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void* array[]);
 void write_table(Storage* storage, Table * table, OpenedTable* dest);
 

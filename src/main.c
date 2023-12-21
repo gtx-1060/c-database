@@ -1,95 +1,79 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+
 #include "storage_intlzr.h"
 #include "storage.h"
 #include "search_filters.h"
-#include "util.h"
-#include "join.h"
 
-void test_remove_and_read(Storage* storage, OpenedTable* table);
-
-static char* s = " bitchhh table1 table1 TWO record bitchhh table1 table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 table1 TWO record bitchhh table1 table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1 TWO record bitchhh table1";
+void insert_rows_example(Storage* storage, OpenedTable* table1);
+void select_rows_example(Storage* storage, OpenedTable* table1);
 
 int main() {
     Storage* storage = init_storage("/home/vlad/Music/db");
     OpenedTable table1;
-    float f = 200.042f;
-    int32_t i;
-    uint16_t ui = 123;
-    uint32_t counter = 0;
 
-    if (!open_table(storage, "test_table3", &table1)) {
+    // open table or create if not exists
+    if (!open_table(storage, "test_table1", &table1)) {
         TableScheme scheme = create_table_scheme(4);
         add_scheme_field(&scheme, "one", TABLE_FTYPE_FLOAT, 1);
         add_scheme_field(&scheme, "two", TABLE_FTYPE_INT_32, 1);
         add_scheme_field(&scheme, "three", TABLE_FTYPE_STRING, 1);
         add_scheme_field(&scheme, "four", TABLE_FTYPE_UINT_16, 1);
-        Table* ttable = init_table(&scheme, "test_table3");
+        Table* ttable = init_table(&scheme, "test_table1");
         create_table(storage, ttable, &table1);
         destruct_table(ttable);
     }
 
-    test_remove_and_read(storage, &table1);
+    // do something with table
+    insert_rows_example(storage, &table1);
+    select_rows_example(storage, &table1);
 
-    for (i = 0; i < 1000; i++) {
-        f -= 0.653f;
-        void *row[] = {&f, &i, s, &ui};
-//        printf( " i= %u ", i);
-        table_insert_row(storage, &table1, row);
-        counter++;
-    }
-    printf("\n%u rows wrote\n", counter);
-    counter = 0;
-
-//    test_remove_and_read(storage, &table1);
-//    printf("\n%u rows wrote\n", counter);
-//    open_table(storage, "test_table4", &table2);
-//    Join* join = join_tables(storage, &table1, &table2, "two");
-//    while (join_next_row(join) == REQUEST_ROW_FOUND && counter < 1000) {
-//        void** row = join->row;
-//        counter++;
-//        printf("[%u]f=%f; i=%d; s=%s; f=%f; i=%d; s=%s\n", counter, *(float*)row[0], *(int32_t*)row[1],
-//               (char*)row[2], *(float*)row[3], *(int32_t*)row[4], (char*)row[5]);
-//    }
-//    join_free(join);
-//    test_remove_and_read(storage, &table1);
-
+    // close table
     close_table(storage, &table1);
-//    close_table(storage, &table2);
     close_storage(storage);
     return 0;
 }
 
-void test_remove_and_read(Storage* storage, OpenedTable* table) {
-    uint32_t counter = 0;
-    RequestIterator* iterator = create_request_iterator(storage, table);
-    int32_t lower_bound = 0;
-    float f;
-    char* ss;
-    int32_t i;
-//    request_iterator_add_filter(iterator, greater_filter, &lower_bound, "two");
-    while (request_iterator_next(iterator) == REQUEST_ROW_FOUND && counter < 2000) {
-        f = *(float*)iterator->found[0];
-        i = *(int32_t*)iterator->found[1];
-        ss = (char*)iterator->found[2];
-//        printf("row: %f %d '%s'\n", f , i, s);
-        request_iterator_remove_current(iterator);
-        counter++;
+void insert_rows_example(Storage* storage, OpenedTable* table1) {
+    float f = 234.234f;
+    uint16_t ui = 1;
+    char* s = "string! for tests!";
+    for (int i = 0; i < 100; i++) {
+        void *row[] = {&f, &i, s, &ui};
+        table_insert_row(storage, table1, row);
+        ui++;
+        f += 1.2132f;
     }
-    printf("\n%u rows removed\n", counter);
-    counter = 0;
-    request_iterator_free(iterator);
+}
 
-    iterator = create_request_iterator(storage, table);
-    while (request_iterator_next(iterator) == REQUEST_ROW_FOUND) {
-        f = *(float*)iterator->found[0];
-        i = *(int32_t*)iterator->found[1];
-        ss = (char*)iterator->found[2];
-        if (i > 400)
-            printf("row: %f %d '%s'\n", f , i, ss);
-        counter++;
+void select_rows_example(Storage* storage, OpenedTable* table1) {
+    RowsIterator* iter = create_rows_iterator(storage, table1);
+    float f = 250.43f;
+    rows_iterator_add_filter(iter, greater_filter, &f, "one");  // optional filter
+    while (rows_iterator_next(iter) == REQUEST_ROW_FOUND) {
+        printf("%f, %d, %s, %hu", *(float*)iter->found[0], *(int*)iter->found[1],
+               (char*)iter->found[2], *(uint16_t *)iter->found[0]);
     }
-    printf("\n%u rows got\n", counter);
-    request_iterator_free(iterator);
+    rows_iterator_free(iter);
+}
+
+void update_rows_example(Storage* storage, OpenedTable* table1) {
+    RowsIterator* iter = create_rows_iterator(storage, table1);
+    float f = 10.f;
+    while (rows_iterator_next(iter) == REQUEST_ROW_FOUND) {
+        void *row[] = {&f, 0, 0, 0};    // update only non-null fields
+        rows_iterator_update_current(iter, row);
+    }
+    rows_iterator_free(iter);
+}
+
+void remove_rows_example(Storage* storage, OpenedTable* table1) {
+    RowsIterator* iter = create_rows_iterator(storage, table1);
+    uint16_t i = 100;
+    rows_iterator_add_filter(iter, equals_filter, &i, "four");  // optional filter
+    while (rows_iterator_next(iter) == REQUEST_ROW_FOUND) {
+        rows_iterator_remove_current(iter);
+    }
+    rows_iterator_free(iter);
 }

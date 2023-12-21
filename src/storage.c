@@ -5,7 +5,7 @@
 #include <malloc.h>
 #include <string.h>
 #include "storage.h"
-#include "request_iterator.h"
+#include "rows_iterator.h"
 #include "util.h"
 #include "search_filters.h"
 
@@ -18,16 +18,16 @@ FileHeader* get_header(Storage* storage) {
 PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size) {
     uint32_t pi;
     if (storage->free_page_table.mapped_addr && storage->free_page_table.scheme) {
-        RequestIterator* iter = create_request_iterator(storage, &storage->free_page_table);
-        request_iterator_add_filter(iter, equals_filter, &scale, "page_scale");
-        if (request_iterator_next(iter) == REQUEST_ROW_FOUND) {
+        RowsIterator* iter = create_rows_iterator(storage, &storage->free_page_table);
+        rows_iterator_add_filter(iter, equals_filter, &scale, "page_scale");
+        if (rows_iterator_next(iter) == REQUEST_ROW_FOUND) {
             pi = *(uint32_t*)iter->found[0];
-            request_iterator_remove_current(iter);
+            rows_iterator_remove_current(iter);
         } else {
             pi = get_header(storage)->pages_number;
             get_header(storage)->pages_number += scale;
         }
-        request_iterator_free(iter);
+        rows_iterator_free(iter);
     } else {
         pi = get_header(storage)->pages_number;
         get_header(storage)->pages_number += scale;
@@ -119,10 +119,10 @@ void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
     size_t lower_bound = sizeof(uint16_t) + str_len + sizeof(uint16_t);
     size_t upper_bound = lower_bound+HEAP_ROW_SIZE_STEP;
     char* table_name = HEAP_TABLES_NAME;
-    RequestIterator* iter = create_request_iterator(storage, &storage->tables);
-    request_iterator_add_filter(iter, equals_filter, table_name, "name");
-    request_iterator_add_filter(iter, greater_filter, &str_len, "row_size");
-    request_iterator_add_filter(iter, less_filter, &upper_bound, "row_size");
+    RowsIterator* iter = create_rows_iterator(storage, &storage->tables);
+    rows_iterator_add_filter(iter, equals_filter, table_name, "name");
+    rows_iterator_add_filter(iter, greater_filter, &str_len, "row_size");
+    rows_iterator_add_filter(iter, less_filter, &upper_bound, "row_size");
     // open heap table or if aren't create
     if (!map_table(storage, iter, heap_table)) {
         TableScheme scheme = get_heap_table_scheme(str_len);
@@ -133,11 +133,11 @@ void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
         // because we won't free scheme memory
         free(table->name);
         free(table);
-        request_iterator_free(iter);
+        rows_iterator_free(iter);
         return;
     }
     heap_table->scheme = get_heap_table_scheme(str_len).fields;
-    request_iterator_free(iter);
+    rows_iterator_free(iter);
 }
 
 // take refs from array and write consistently into memory
@@ -272,12 +272,12 @@ void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_heade
     uint16_t table_id = *(uint16_t*)pointer;
     free_row(&row);
     // look for the heap table and remove row with string
-    RequestIterator* iter = create_request_iterator(storage, &storage->tables);
-    request_iterator_add_filter(iter, equals_filter, &table_id, "table_id");
+    RowsIterator* iter = create_rows_iterator(storage, &storage->tables);
+    rows_iterator_add_filter(iter, equals_filter, &table_id, "table_id");
     OpenedTable heap_table;
     map_table(storage, iter, &heap_table);
     heap_table.scheme = get_heap_table_scheme(str_len).fields;
-    request_iterator_free(iter);
+    rows_iterator_free(iter);
     table_remove_row(storage, &heap_table, str_page_ind, str_row_ind);
     close_table(storage, &heap_table);
 }
@@ -348,8 +348,8 @@ void table_replace_row(Storage* storage, const OpenedTable* table, uint32_t page
     free(row.data);
 }
 
-uint8_t map_table(Storage* storage, RequestIterator* iter, OpenedTable* dest) {
-    RequestIteratorResult result = request_iterator_next(iter);
+uint8_t map_table(Storage* storage, RowsIterator* iter, OpenedTable* dest) {
+    RowsIteratorResult result = rows_iterator_next(iter);
     if (result == REQUEST_SEARCH_END) {
         return 0;
     }
@@ -367,11 +367,11 @@ uint8_t map_table(Storage* storage, RequestIterator* iter, OpenedTable* dest) {
 // using map_table(...) function
 uint8_t table_load_scheme(Storage* storage, OpenedTable* dest) {
     TableScheme scheme = create_table_scheme(dest->mapped_addr->fields_n);
-    RequestIterator* iter = create_request_iterator(storage, &storage->scheme_table);
-    request_iterator_add_filter(iter, equals_filter, &dest->mapped_addr->table_id, "table_id");
+    RowsIterator* iter = create_rows_iterator(storage, &storage->scheme_table);
+    rows_iterator_add_filter(iter, equals_filter, &dest->mapped_addr->table_id, "table_id");
     for (uint32_t i = 0; i < dest->mapped_addr->fields_n; i++) {
-        if (request_iterator_next(iter) == REQUEST_SEARCH_END) {
-            request_iterator_free(iter);
+        if (rows_iterator_next(iter) == REQUEST_SEARCH_END) {
+            rows_iterator_free(iter);
             free_scheme(scheme.fields, dest->mapped_addr->fields_n);
             return 0;
         }
@@ -379,19 +379,19 @@ uint8_t table_load_scheme(Storage* storage, OpenedTable* dest) {
         insert_scheme_field(&scheme, (char*)row[0], *(uint8_t*)row[1],
                             *(uint8_t*)row[2], *(uint16_t*)row[3]);
     }
-    request_iterator_free(iter);
+    rows_iterator_free(iter);
     dest->scheme = scheme.fields;
     return 1;
 }
 
 uint8_t open_table(Storage* storage, char* name, OpenedTable* dest) {
-    RequestIterator* iter = create_request_iterator(storage, &storage->tables);
-    request_iterator_add_filter(iter, equals_filter, name, "name");
+    RowsIterator* iter = create_rows_iterator(storage, &storage->tables);
+    rows_iterator_add_filter(iter, equals_filter, name, "name");
     if (!map_table(storage, iter, dest)) {
-        request_iterator_free(iter);
+        rows_iterator_free(iter);
         return 0;
     }
-    request_iterator_free(iter);
+    rows_iterator_free(iter);
     if (strncmp(dest->mapped_addr->name, name, 32) != 0)
         panic("OPENED WRONG TABLE OR ANOTHER MEMORY MAPPED!", 4);
     if (!table_load_scheme(storage, dest))
@@ -432,13 +432,13 @@ void write_table_scheme(Storage* storage, Table* table, uint16_t table_id) {
 
 // create table and open it
 void create_table(Storage* storage, Table* table, OpenedTable* dest) {
-    RequestIterator* iter = create_request_iterator(storage, &storage->tables);
-    request_iterator_add_filter(iter, equals_filter, &table->fields, "name");
-    if (request_iterator_next(iter) == REQUEST_ROW_FOUND) {
-        request_iterator_free(iter);
+    RowsIterator* iter = create_rows_iterator(storage, &storage->tables);
+    rows_iterator_add_filter(iter, equals_filter, &table->fields, "name");
+    if (rows_iterator_next(iter) == REQUEST_ROW_FOUND) {
+        rows_iterator_free(iter);
         return;
     }
-    request_iterator_free(iter);
+    rows_iterator_free(iter);
     write_table(storage, table, dest);
     write_table_scheme(storage, table, dest->mapped_addr->table_id);
     table_load_scheme(storage, dest);

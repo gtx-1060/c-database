@@ -5,11 +5,11 @@
 #ifndef LAB1_JOIN_H
 #define LAB1_JOIN_H
 
-#include "request_iterator.h"
+#include "rows_iterator.h"
 
 typedef struct Join {
-    RequestIterator* iter1;
-    RequestIterator* iter2;
+    RowsIterator* iter1;
+    RowsIterator* iter2;
     uint16_t row1_len;
     uint16_t row2_len;
     char* fname;
@@ -19,7 +19,7 @@ typedef struct Join {
 } Join;
 
 Join* join_tables(Storage* storage, OpenedTable* table1, OpenedTable* table2, char* field);
-RequestIteratorResult join_next_row(Join* join);
+RowsIteratorResult join_next_row(Join* join);
 void join_free(Join* join);
 
 #endif //LAB1_JOIN_H

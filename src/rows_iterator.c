@@ -2,13 +2,13 @@
 // Created by vlad on 21.11.23.
 //
 
-#include "request_iterator.h"
+#include "rows_iterator.h"
 #include <malloc.h>
 #include "string.h"
 #include "util.h"
 
-RequestIterator* create_request_iterator(Storage* storage, const OpenedTable* table) {
-    RequestIterator* req_iter = malloc(sizeof(RequestIterator));
+RowsIterator* create_rows_iterator(Storage* storage, const OpenedTable* table) {
+    RowsIterator* req_iter = malloc(sizeof(RowsIterator));
     req_iter->table = table;
     req_iter->found = NULL;
     req_iter->storage = storage;
@@ -19,7 +19,7 @@ RequestIterator* create_request_iterator(Storage* storage, const OpenedTable* ta
     return req_iter;
 }
 
-void request_iterator_add_filter(RequestIterator* iter, filter_predicate predicate, void* value, char* fname) {
+void rows_iterator_add_filter(RowsIterator* iter, filter_predicate predicate, void* value, char* fname) {
     for (uint32_t i = 0; i < iter->table->mapped_addr->fields_n; i++) {
         if (strcmp(iter->table->scheme[i].name, fname) == 0) {
             RequestFilter* filter = malloc(sizeof(RequestFilter));
@@ -37,7 +37,7 @@ void request_iterator_add_filter(RequestIterator* iter, filter_predicate predica
     }
 }
 
-uint8_t check_filters(RequestIterator* iter, void* row[]) {
+uint8_t check_filters(RowsIterator* iter, void* row[]) {
     if (iter->filters_list == NULL)
         return 1;
     RequestFilter* f = iter->filters_list;
@@ -49,7 +49,7 @@ uint8_t check_filters(RequestIterator* iter, void* row[]) {
     return 1;
 }
 
-RequestIteratorResult request_iterator_next(RequestIterator* iter) {
+RowsIteratorResult rows_iterator_next(RowsIterator* iter) {
     GetRowResult row;
     while (iter->source == TABLE_FREE_LIST || iter->page_pointer != 0) {
         row = table_get_row(iter->storage, iter->table, iter->page_pointer, iter->row_pointer);
@@ -83,7 +83,7 @@ RequestIteratorResult request_iterator_next(RequestIterator* iter) {
     return REQUEST_SEARCH_END;
 }
 
-void request_iterator_remove_current(RequestIterator* iter) {
+void rows_iterator_remove_current(RowsIterator* iter) {
     if (iter->page_pointer == 0 || iter->row_pointer == 0) {
         panic("ATTEMPT TO REMOVE ROW OF [0] PAGE WITH ITERATOR", 5);
     }
@@ -94,7 +94,7 @@ void request_iterator_remove_current(RequestIterator* iter) {
 }
 
 // you can pass NULL in the row, so that field keep its value
-void request_iterator_replace_current(RequestIterator* iter, void** row) {
+void rows_iterator_update_current(RowsIterator* iter, void** row) {
     if (iter->page_pointer == 0 || iter->found == NULL) {
         panic("ATTEMPT TO REPLACE ROW OF [0] PAGE WITH ITERATOR", 5);
     }
@@ -108,14 +108,14 @@ void request_iterator_replace_current(RequestIterator* iter, void** row) {
 
 // returns list of row scheme delegates responsibility for
 // freeing it to the caller
-void** request_iterator_take_found(RequestIterator* iter) {
+void** rows_iterator_take_found(RowsIterator* iter) {
     void** data = iter->found;
     iter->found = NULL;
     return data;
 }
 
 
-void request_iterator_free(RequestIterator* iter) {
+void rows_iterator_free(RowsIterator* iter) {
     if (iter->found)
         free_row_array(iter->table->mapped_addr->fields_n, iter->found);
     while (iter->filters_list && iter->filters_list->list.next != &iter->filters_list->list) {

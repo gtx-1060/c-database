@@ -51,13 +51,13 @@ void open_tables_table(Storage* storage) {
             .table_id = 0
     };
     storage->tables.mapped_addr = &stub;
-    RequestIterator* iter = create_request_iterator(storage, &storage->tables);
+    RowsIterator* iter = create_rows_iterator(storage, &storage->tables);
     char* tablename = "tables";
-    request_iterator_add_filter(iter, equals_filter, tablename, "name");
+    rows_iterator_add_filter(iter, equals_filter, tablename, "name");
     if (!map_table(storage, iter, &storage->tables)) {
         panic("CANT OPEN TABLE FOR TABLE, NOT FOUND!",  6);
     }
-    request_iterator_free(iter);
+    rows_iterator_free(iter);
 }
 
 
@@ -96,13 +96,13 @@ void create_scheme_table(Storage *storage) {
 }
 
 void open_scheme_table(Storage *storage) {
-    RequestIterator* iter = create_request_iterator(storage, &storage->tables);
+    RowsIterator* iter = create_rows_iterator(storage, &storage->tables);
     char* scheme_table_name = "scheme_table";
-    request_iterator_add_filter(iter, equals_filter, scheme_table_name, "name");
+    rows_iterator_add_filter(iter, equals_filter, scheme_table_name, "name");
     if (!map_table(storage, iter, &storage->scheme_table)) {
         panic("CANT LOAD SCHEME TABLE", 6);
     }
-    request_iterator_free(iter);
+    rows_iterator_free(iter);
     storage->scheme_table.scheme = get_scheme_table_scheme().fields;
 }
 

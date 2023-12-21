@@ -49,7 +49,9 @@ uint8_t equals_filter(SchemeItem* field, void** row, void* value) {
 }
 
 uint8_t random_filter(SchemeItem* field, void** row, void* value) {
-    return (rand() % 3) == 0;
+    float r = (float)rand()/(float)RAND_MAX;
+//    printf("rand = %f, %f\n", r, *(float*)value);
+    return r < *(float*)value;
 }
 
 uint8_t greater_filter(SchemeItem* field, void** row, void* value) {

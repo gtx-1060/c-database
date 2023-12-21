@@ -4,6 +4,8 @@
 
 #include "util.h"
 
+#define LOG 0
+
 char* log_phrases[] = {
         [ROW_INSERT] = "inserted",
         [ROW_REMOVE] = "removed",
@@ -19,6 +21,8 @@ void panic(char* msg, int code) {
 }
 
 void tlog(enum TableActions action, char* tname, uint32_t page, uint32_t row) {
+#if LOG
     printf("[Log]   Record successfully %s        table='%s'      page=%u       row=%u\n",
            log_phrases[action], tname, page, row);
+#endif
 }
