@@ -4,5 +4,6 @@
 пользовательского API, представлены в *main.c*.
 ### Сборка
 ```shell
+~ cmake -Bcmake-debug-build -H.
 ~ cmake --build cmake-build-debug --target all
 ```
