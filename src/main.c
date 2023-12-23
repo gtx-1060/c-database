@@ -1,10 +1,9 @@
 #include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 
 #include "storage_intlzr.h"
 #include "storage.h"
 #include "search_filters.h"
+#include "tests.h"
 
 void insert_rows_example(Storage* storage, OpenedTable* table1);
 void select_rows_example(Storage* storage, OpenedTable* table1);
@@ -25,9 +24,7 @@ int main() {
         destruct_table(ttable);
     }
 
-    // do something with table
-    insert_rows_example(storage, &table1);
-    select_rows_example(storage, &table1);
+    test_insert_delete(storage, &table1);
 
     // close table
     close_table(storage, &table1);

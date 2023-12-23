@@ -28,7 +28,6 @@ typedef struct __attribute__((__packed__)) PageRecord {
 
 typedef struct PageRow {
     uint32_t index;
-//    uint32_t size;
     void* data;
 } PageRow;
 

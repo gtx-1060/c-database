@@ -3,6 +3,8 @@
 #include "storage.h"
 #include "search_filters.h"
 #include "util.h"
+#include "tests.h"
+
 
 void insert_n_rows(Storage* storage, OpenedTable* table1, int t_number);
 void delete_random(Storage* storage, OpenedTable* table1,float chance);
@@ -25,28 +27,23 @@ void test_delete(Storage* storage, OpenedTable* table1) {
 }
 
 void test_insert_delete(Storage* storage, OpenedTable* table1) {
+    FILE* insert_test = fopen("/home/vlad/Music/insert.csv", "w+");
+    FILE* remove_test = fopen("/home/vlad/Music/remove.csv", "w+");
     clock_t t1;
-    clock_t* tests = malloc(sizeof(clock_t) * 9 * 20);
-    clock_t* p = tests;
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 1000; i++) {
         for (int j = 0; j < 5; j++) {
             t1 = clock();
             insert_n_rows(storage, table1, 100);
-            *p = clock() - t1;
-            p++;
+            fprintf(insert_test, "%f, ", (float)(clock() - t1) / CLOCKS_PER_SEC);
         }
         for (int j = 0; j < 4; j++) {
             t1 = clock();
             delete_random(storage, table1, (float)100/(float)(500+(i*100)-(j*100)));
-            *p = clock() - t1;
-            p++;
+            fprintf(remove_test, "%f, ", (float)(clock() - t1) / CLOCKS_PER_SEC);
         }
     }
-
-    for (p = tests; p < tests + 9 * 20; p++) {
-        printf("%f, ", (float)(*p) /  CLOCKS_PER_SEC);
-    }
-    free(tests);
+    fclose(insert_test);
+    fclose(remove_test);
 }
 
 void delete_random(Storage* storage, OpenedTable* table1,float chance) {

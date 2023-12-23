@@ -58,7 +58,7 @@ typedef struct MemoryManager {
     uint16_t chunks_ind;
     int file_descriptor;
     void* win_map_handle;       // used only on win
-    uint32_t file_size;         // in pages; used only on win
+    uint32_t file_size;
     uint32_t alloc_gran;         // used only on win;
     Chunk* last_used;
 } MemoryManager;

@@ -37,11 +37,6 @@ typedef struct Storage {
     OpenedTable free_page_table;
 } Storage;
 
-typedef struct FieldValue {
-    char* field_name;
-    void* value;
-} FieldValue;
-
 typedef struct GetRowResult {
     void** data;
     RowReadStatus result;
@@ -55,7 +50,7 @@ typedef struct InsertRowResult {
 // add table entity into the *tables* table
 //void write_table(Storage* storage, Table* table, OpenedTable* dest);
 
-typedef struct RowsIterator RequestIterator;
+typedef struct RowsIterator RowsIterator;
 
 // loads information about the table
 // permanently maps it into memory

@@ -33,7 +33,6 @@ typedef struct SchemeItem {
     uint16_t order;
     uint8_t nullable;
     uint16_t max_sz;
-//    uint16_t actual_sz;     // uses only for TABLE_FTYPE_CHARS
 } SchemeItem;
 
 typedef struct TableScheme {
