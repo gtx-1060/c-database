@@ -18,7 +18,6 @@ typedef enum RowsIteratorResult {
     REQUEST_SEARCH_END
 } RowsIteratorResult;
 
-
 typedef struct RequestFilter {
     List list;
     filter_predicate predicate;
@@ -27,13 +26,15 @@ typedef struct RequestFilter {
 } RequestFilter;
 
 typedef struct RowsIterator {
-//    filter_predicate predicate;
     const OpenedTable* table;
     Storage* storage;
+    RowsIterator* outer;
     RequestFilter* filters_list;
     uint32_t page_pointer;
     uint32_t row_pointer;
-    void** found;
+    uint16_t row_offset;
+    uint16_t row_size;      // in fields number include all outer iterators
+    void** row;
     enum TableList {TABLE_FREE_LIST, TABLE_FULL_LIST} source;
 } RowsIterator;
 

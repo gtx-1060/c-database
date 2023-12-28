@@ -32,9 +32,9 @@ Join* join_tables(Storage* storage, OpenedTable* table1, OpenedTable* table2, ch
     }
     rows_iterator_next(join->iter1);
     join->iter2 = create_rows_iterator(storage, table2);
-    void* looking_for = join->iter1->found[join->field_ind_t1];
+    void* looking_for = join->iter1->row[join->field_ind_t1];
     rows_iterator_add_filter(join->iter2, equals_filter, looking_for, field);
-    memcpy(join->row, join->iter1->found, join->row1_len * sizeof(void*));
+    memcpy(join->row, join->iter1->row, join->row1_len * sizeof(void*));
     return join;
 }
 
@@ -42,16 +42,16 @@ RowsIteratorResult join_next_row(Join* join) {
     while (rows_iterator_next(join->iter2) == REQUEST_SEARCH_END) {
         if (rows_iterator_next(join->iter1) == REQUEST_SEARCH_END)
             return REQUEST_SEARCH_END;
-        memcpy(join->row, join->iter1->found, join->row1_len * sizeof(void*));
+        memcpy(join->row, join->iter1->row, join->row1_len * sizeof(void*));
         RowsIterator* old_iter = join->iter2;
         join->iter2 = create_rows_iterator(join->iter2->storage, join->iter2->table);
         rows_iterator_free(old_iter);
-        void* looking_for = join->iter1->found[join->field_ind_t1];
+        void* looking_for = join->iter1->row[join->field_ind_t1];
         rows_iterator_add_filter(join->iter2, equals_filter, looking_for, join->fname);
     }
 
     void** dest = join->row + join->row1_len;
-    memcpy(dest,join->iter2->found, join->row2_len * sizeof(void*));
+    memcpy(dest, join->iter2->row, join->row2_len * sizeof(void*));
     return REQUEST_ROW_FOUND;
 }
 

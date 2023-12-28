@@ -21,7 +21,7 @@ PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size) {
         RowsIterator* iter = create_rows_iterator(storage, &storage->free_page_table);
         rows_iterator_add_filter(iter, equals_filter, &scale, "page_scale");
         if (rows_iterator_next(iter) == REQUEST_ROW_FOUND) {
-            pi = *(uint32_t*)iter->found[0];
+            pi = *(uint32_t*)iter->row[0];
             rows_iterator_remove_current(iter);
         } else {
             pi = get_header(storage)->pages_number;
@@ -207,17 +207,16 @@ InsertRowResult table_insert_row(Storage* storage, const OpenedTable* table, voi
     return result;
 }
 
-GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind) {
-    GetRowResult result = {0};
+RowReadStatus table_get_row_in_buff(Storage* storage, const OpenedTable* table, void* buffer[],
+                                    uint32_t page_ind, uint32_t row_ind) {
     PageRow row = {.index=row_ind};
     PageMeta page;
     read_page_meta(&storage->manager, page_ind, &page);
 
-    result.result = read_row(&storage->manager, &page, &row);
-    if (result.result != READ_ROW_OK)
+    RowReadStatus result = read_row(&storage->manager, &page, &row);
+    if (result != READ_ROW_OK)
         return result;
     char* pointer = row.data;
-    void** data = malloc(sizeof(void*)*table->mapped_addr->fields_n);
     for (uint32_t i = 0; i < table->mapped_addr->fields_n; i++) {
         if (table->scheme[i].order != i) {
             panic("wrong scheme items order", 4);
@@ -235,18 +234,29 @@ GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t 
                 continue;
             }
             uint16_t str_len = *(uint16_t*)string_row.data;
-            data[i] = malloc(str_len);
-            memcpy(data[i], ((char*)string_row.data) + sizeof(uint16_t), str_len);
+            buffer[i] = malloc(str_len);
+            memcpy(buffer[i], ((char*)string_row.data) + sizeof(uint16_t), str_len);
             pointer += table->scheme[i].max_sz;
             free_row(&string_row);
             continue;
         }
-        data[i] = malloc(table->scheme[i].max_sz);
-        memcpy(data[i], pointer, table->scheme[i].max_sz);
+        buffer[i] = malloc(table->scheme[i].max_sz);
+        memcpy(buffer[i], pointer, table->scheme[i].max_sz);
         pointer += table->scheme[i].max_sz;
     }
     free_row(&row);
-    result.data = data;
+    return result;
+}
+
+GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind) {
+    GetRowResult result = {
+            .data = malloc(sizeof(void*) * table->mapped_addr->fields_n)
+    };
+    result.result = table_get_row_in_buff(storage, table, result.data, page_ind, row_ind);
+    if (result.result != READ_ROW_OK) {
+        free(result.data);
+        result.data = NULL;
+    }
     return result;
 }
 
@@ -375,7 +385,7 @@ uint8_t table_load_scheme(Storage* storage, OpenedTable* dest) {
             free_scheme(scheme.fields, dest->mapped_addr->fields_n);
             return 0;
         }
-        void** row = iter->found;
+        void** row = iter->row;
         insert_scheme_field(&scheme, (char*)row[0], *(uint8_t*)row[1],
                             *(uint8_t*)row[2], *(uint16_t*)row[3]);
     }
@@ -449,12 +459,12 @@ void close_table(Storage* storage, OpenedTable* table) {
     remove_chunk(&storage->manager, &table->chunk);
 }
 
-void free_row_array(uint16_t fields, void** row) {
+void free_row_content(uint16_t fields, void** row) {
     for (uint16_t i = 0; i < fields; i++) {
         if (row[i] != NULL)
             free(row[i]);
+        row[i] = NULL;
     }
-    free(row);
 }
 
 

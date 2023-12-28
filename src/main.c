@@ -49,8 +49,8 @@ void select_rows_example(Storage* storage, OpenedTable* table1) {
     float f = 250.43f;
     rows_iterator_add_filter(iter, greater_filter, &f, "one");  // optional filter
     while (rows_iterator_next(iter) == REQUEST_ROW_FOUND) {
-        printf("%f, %d, %s, %hu", *(float*)iter->found[0], *(int*)iter->found[1],
-               (char*)iter->found[2], *(uint16_t *)iter->found[0]);
+        printf("%f, %d, %s, %hu", *(float*)iter->row[0], *(int*)iter->row[1],
+               (char*)iter->row[2], *(uint16_t *)iter->row[0]);
     }
     rows_iterator_free(iter);
 }

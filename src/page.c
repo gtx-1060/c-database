@@ -186,7 +186,7 @@ RowRemoveStatus remove_row(MemoryManager* manager, const PageMeta* header, uint3
     return REMOVE_ROW_OK;
 }
 
-// return -1 if not found
+// return -1 if not row
 int64_t find_empty_row(MemoryManager* manager, const PageMeta* header) {
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, 1);
     uint32_t rows_n = rows_number(header);

@@ -60,10 +60,14 @@ void write_table(Storage* storage, Table * table, OpenedTable* dest);
 
 InsertRowResult table_insert_row(Storage* storage, const OpenedTable* table, void* array[]);
 void table_remove_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind);
+
+RowReadStatus table_get_row_in_buff(Storage* storage, const OpenedTable* table, void* buffer[],
+                                    uint32_t page_ind, uint32_t row_ind);
 GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind);
+
 void table_replace_row(Storage* storage, const OpenedTable* table, uint32_t page_ind,uint32_t row_ind, void* array[]);
 
-void free_row_array(uint16_t fields, void** row);
+void free_row_content(uint16_t fields, void** row);
 FileHeader* get_header(Storage* storage);
 PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size);
 
