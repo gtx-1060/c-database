@@ -7,6 +7,7 @@
 
 void insert_rows_example(Storage* storage, OpenedTable* table1);
 void select_rows_example(Storage* storage, OpenedTable* table1);
+void remove_rows_example(Storage* storage, OpenedTable* table1);
 
 int main() {
     Storage* storage = init_storage("/home/vlad/Music/db");
@@ -24,7 +25,9 @@ int main() {
         destruct_table(ttable);
     }
 
-    test_insert_delete(storage, &table1);
+    insert_rows_example(storage, &table1);
+    select_rows_example(storage, &table1);
+    remove_rows_example(storage, &table1);
 
     // close table
     close_table(storage, &table1);
@@ -46,10 +49,9 @@ void insert_rows_example(Storage* storage, OpenedTable* table1) {
 
 void select_rows_example(Storage* storage, OpenedTable* table1) {
     RowsIterator* iter = create_rows_iterator(storage, table1);
-    float f = 250.43f;
-    rows_iterator_add_filter(iter, greater_filter, &f, "one");  // optional filter
+//    rows_iterator_add_filter(iter, greater_filter, &f, "one");  // optional filter
     while (rows_iterator_next(iter) == REQUEST_ROW_FOUND) {
-        printf("%f, %d, %s, %hu", *(float*)iter->row[0], *(int*)iter->row[1],
+        printf("%f, %d, %s, %hu\n", *(float*)iter->row[0], *(int*)iter->row[1],
                (char*)iter->row[2], *(uint16_t *)iter->row[0]);
     }
     rows_iterator_free(iter);
@@ -67,8 +69,7 @@ void update_rows_example(Storage* storage, OpenedTable* table1) {
 
 void remove_rows_example(Storage* storage, OpenedTable* table1) {
     RowsIterator* iter = create_rows_iterator(storage, table1);
-    uint16_t i = 100;
-    rows_iterator_add_filter(iter, equals_filter, &i, "four");  // optional filter
+//    rows_iterator_add_filter(iter, equals_filter, &i, "four");  // optional filter
     while (rows_iterator_next(iter) == REQUEST_ROW_FOUND) {
         rows_iterator_remove_current(iter);
     }

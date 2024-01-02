@@ -7,9 +7,22 @@
 
 #include "rows_iterator.h"
 
-uint8_t equals_filter(SchemeItem* field, void** row, void* value);
-uint8_t greater_filter(SchemeItem* field, void** row, void* value);
-uint8_t less_filter(SchemeItem* field, void** row, void* value);
-uint8_t random_filter(SchemeItem* field, void** row, void* value);
+
+void rows_iterator_add_filter(RowsIterator* iter, filter_predicate predicate, void* value, char* column);
+FilterNode* create_filter_node_l(RowsIterator* iter, filter_predicate predicate, char* column, void* value);
+FilterNode* create_filter_node_v(RowsIterator* iter, filter_predicate predicate, char* column1, char* column2);
+
+FilterNode* create_filter_and(FilterNode* l, FilterNode* r);
+FilterNode* create_filter_or(FilterNode* l, FilterNode* r);
+
+uint8_t equals_filter(TableDatatype type, void* value1, void* value2);
+uint8_t greater_filter(TableDatatype type, void* value1, void* value2);
+uint8_t greater_eq_filter(TableDatatype type, void* value1, void* value2);
+uint8_t less_filter(TableDatatype type, void* value1, void* value2);
+uint8_t less_eq_filter(TableDatatype type, void* value1, void* value2);
+uint8_t substring_of(TableDatatype type, void* value1, void* value2);
+uint8_t in_string(TableDatatype type, void* value1, void* value2);
+
+uint8_t random_filter(TableDatatype type, void* value1, void* value2);
 
 #endif //LAB1_SEARCH_FILTERS_H

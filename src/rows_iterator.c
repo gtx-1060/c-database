@@ -3,7 +3,6 @@
 //
 
 #include "rows_iterator.h"
-#include <malloc.h>
 #include "string.h"
 #include "util.h"
 
@@ -14,7 +13,7 @@ RowsIterator* init(Storage* storage, const OpenedTable* table) {
     RowsIterator* req_iter = malloc(sizeof(RowsIterator));
     req_iter->row = NULL;
     req_iter->outer = NULL;
-    req_iter->filters_list = NULL;
+    req_iter->filters = NULL;
 
     req_iter->table = table;
     req_iter->storage = storage;
@@ -62,51 +61,65 @@ RowsIterator* create_rows_iterator(Storage* storage, const OpenedTable* table) {
     return iter;
 }
 
-void rows_iterator_add_filter(RowsIterator* iter, filter_predicate predicate, void* value, char* fname) {
-    for (uint32_t i = 0; i < iter->table->mapped_addr->fields_n; i++) {
-        if (strcmp(iter->table->scheme[i].name, fname) == 0) {
-            RequestFilter* filter = malloc(sizeof(RequestFilter));
-            filter->field = iter->table->scheme+i;
-            filter->value = value;
-            filter->predicate = predicate;
-            if (iter->filters_list == NULL) {
-                lst_init(&filter->list);
-                iter->filters_list = filter;
-                return;
-            }
-            lst_push(&iter->filters_list->list, filter);
-            return;
+FilterNode* rows_iterator_get_filter(RowsIterator* iter) {
+    return iter->filters;
+}
+
+void rows_iterator_set_filter(RowsIterator* iter, FilterNode* filter) {
+    iter->filters = filter;
+}
+
+// return index of column and its type
+// or -1 if not found
+int find_column_by_name(RowsIterator* iter, char* column, TableDatatype* type) {
+    for (SchemeItem* col = iter->table->scheme;
+            col < iter->table->scheme + iter->table->mapped_addr->fields_n; col++) {
+        if (strcmp(col->name, column) == 0) {
+            *type = col->type;
+            return iter->row_offset + col->order;
         }
     }
+    if (iter->outer)
+        return find_column_by_name(iter->outer, column, type);
+    return -1;
 }
 
 /*
- * Always extend row with values to compare
- * Pass into the filter ext_row + ind1 + ind2
+ * Always extend row with values f outer scope iterator
+ * Pass into the filter ext_row + ind1 + ind2 if variable comparison
  */
-uint8_t check_filters(RowsIterator* iter) {
-    if (iter->filters_list == NULL)
+uint8_t check_filters(FilterNode* filter, void* row[]) {
+    if (!filter)
         return 1;
-    RequestFilter* f = iter->filters_list;
-    do {
-        if (!f->predicate(f->field, iter->row, f->value))
-            return 0;
-        f = (RequestFilter*)f->list.next;
-    } while (f != iter->filters_list);
-    return 1;
+    switch (filter->type) {
+        case FILTER_AND_NODE:
+            return check_filters(filter->l, row) && check_filters(filter->r, row);
+        case FILTER_OR_NODE:
+            return check_filters(filter->l, row) || check_filters(filter->r, row);
+        case FILTER_LITERAL: {
+            FilterLeaf* leaf = (FilterLeaf*)filter;
+            return leaf->predicate(leaf->datatype, row[leaf->ind1], leaf->value);
+        }
+        case FILTER_VARIABLE: {
+            FilterLeaf* leaf = (FilterLeaf*)filter;
+            return leaf->predicate(leaf->datatype, row[leaf->ind1], row[leaf->ind2]);
+        }
+    }
+    panic("cant parse iterator filters", 5);
+    return 0;
 }
 
 RowsIteratorResult rows_iterator_next(RowsIterator* iter) {
     if (iter == NULL)
         return REQUEST_SEARCH_END;
-    free_row_content(iter->table->mapped_addr->fields_n, current_row(iter));
     while (iter->source == TABLE_FREE_LIST || iter->page_pointer != 0) {
+        free_row_content(iter->table->mapped_addr->fields_n, current_row(iter));
         RowReadStatus s = table_get_row_in_buff(iter->storage, iter->table, current_row(iter),
                                                 iter->page_pointer, iter->row_pointer);
         switch (s) {
             case READ_ROW_OK:
                 iter->row_pointer++;
-                if (check_filters(iter))
+                if (check_filters(iter->filters, iter->row))
                     return REQUEST_ROW_FOUND;
                 break;
             case READ_ROW_IS_NULL:
@@ -119,7 +132,7 @@ RowsIteratorResult rows_iterator_next(RowsIterator* iter) {
                     if (iter->source == TABLE_FREE_LIST) {
                         iter->source = TABLE_FULL_LIST;
                         iter->page_pointer = iter->table->mapped_addr->first_full_pg;
-                    } else if (iter->outer != NULL && rows_iterator_next(iter->outer) == REQUEST_ROW_FOUND) {
+                    } else if (iter->outer && rows_iterator_next(iter->outer) == REQUEST_ROW_FOUND) {
                         iter->page_pointer = iter->table->mapped_addr->first_free_pg;
                         iter->source = TABLE_FREE_LIST;
                     }
@@ -156,6 +169,15 @@ void rows_iterator_update_current(RowsIterator* iter, void** row) {
                       current_row(iter));
 }
 
+void free_filters(FilterNode* filter) {
+    if (!filter)
+        return;
+    if (filter->type == FILTER_AND_NODE || filter->type == FILTER_OR_NODE) {
+        free_filters(filter->l);
+        free_filters(filter->r);
+    }
+    free(filter);
+}
 
 void rows_iterator_free(RowsIterator* iter) {
     if (iter->row) {
@@ -163,12 +185,7 @@ void rows_iterator_free(RowsIterator* iter) {
         if (iter->outer == NULL)
             free(iter->row);
     }
-    while (iter->filters_list && iter->filters_list->list.next != &iter->filters_list->list) {
-        void* deleted = lst_pop(&iter->filters_list->list);
-        free(deleted);
-    }
-    if (iter->filters_list != NULL)
-        free(iter->filters_list);
+    free_filters(iter->filters);
     free(iter);
 }
 
