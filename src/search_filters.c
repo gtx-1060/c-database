@@ -8,7 +8,7 @@
 
 void rows_iterator_add_filter(RowsIterator* iter, filter_predicate predicate, void* value, char* column) {
     FilterNode* current_filter = rows_iterator_get_filter(iter);
-    FilterNode* new_filter = create_filter_node_l(iter, predicate, column, value);
+    FilterNode* new_filter = create_filter_node_l(iter, predicate, column, value, 0, 0);
     if (!current_filter) {
         rows_iterator_set_filter(iter, new_filter);
         return;
@@ -19,26 +19,60 @@ void rows_iterator_add_filter(RowsIterator* iter, filter_predicate predicate, vo
     );
 }
 
-FilterNode* create_filter_node_l(RowsIterator* iter, filter_predicate predicate, char* column, void* value) {
+// filter for column-literal conditions
+FilterNode* create_filter_node_l(RowsIterator* iter, filter_predicate predicate, char* column, void* value,
+                                 uint8_t switch_order, uint8_t values_allocd) {
     FilterLeaf* node = malloc(sizeof(FilterLeaf));
     node->type = FILTER_LITERAL;
-    node->ind1 = find_column_by_name(iter, column, &node->datatype);
+    int ind = iterator_find_column_index(iter, column, &node->datatype);
+    if (ind < 0) {
+        free(node);
+        return 0;
+    }
+    node->ind1 = (uint16_t)ind;
     node->value = value;
     node->predicate = predicate;
+    node->switch_order = switch_order;
+    node->values_allocd = values_allocd;
     return (FilterNode*)node;
 }
 
-FilterNode* create_filter_node_v(RowsIterator* iter, filter_predicate predicate, char* column1, char* column2) {
+// filter for predefined literal-literal conditions
+FilterNode* create_filter_node_ll(filter_predicate predicate, TableDatatype datatype,
+                                  void* value1, void* value2) {
+    PredefinedFilterLeaf* leaf = malloc(sizeof(PredefinedFilterLeaf));
+    if (predicate(datatype, value1, value2)) {
+        *leaf = FILTER_ALWAYS_TRUE;
+    } else {
+        *leaf = FILTER_ALWAYS_FALSE;
+    }
+    return (FilterNode*)leaf;
+}
+
+// filter for column-column conditions
+FilterNode* create_filter_node_v(RowsIterator* iter1, RowsIterator* iter2, filter_predicate predicate,
+                                 char* column1, char* column2, uint8_t values_allocd) {
     FilterLeaf* node = malloc(sizeof(FilterLeaf));
     node->type = FILTER_VARIABLE;
-    node->ind1 = find_column_by_name(iter, column1, &node->datatype);
+    int ind = iterator_find_column_index(iter1, column1, &node->datatype);
+    if (ind < 0) {
+        free(node);
+        return 0;
+    }
+    node->ind1 = ind;
     TableDatatype type2;
-    node->ind2 = find_column_by_name(iter, column2, &type2);
+    ind = iterator_find_column_index(iter2, column2, &type2);
+    if (ind < 0) {
+        free(node);
+        return 0;
+    }
+    node->ind2 = ind;
     // if type of columns are different
     if (node->datatype != type2) {
         free(node);
-        return NULL;
+        return 0;
     }
+    node->values_allocd = values_allocd;
     node->predicate = predicate;
     return (FilterNode*)node;
 }
@@ -100,6 +134,11 @@ uint8_t equals_filter(TableDatatype type, void* value1, void* value2) {
     return compare_field_value(type, value1, value2) == 0;
 }
 
+uint8_t not_equals_filter(TableDatatype type, void* value1, void* value2) {
+    return compare_field_value(type, value1, value2) != 0;
+}
+
+// just random predicate for stress testing purpose
 uint8_t random_filter(TableDatatype type, void* value1, void* value2) {
     float r = (float)rand()/(float)RAND_MAX;
 //    printf("rand = %f, %f\n", r, *(float*)value);
@@ -123,6 +162,8 @@ uint8_t less_eq_filter(TableDatatype type, void* value1, void* value2) {
 }
 
 uint8_t substring_of(TableDatatype type, void* value1, void* value2) {
+    char* ch1 = value1;
+    char* ch2 = value2;
     return strstr(value2, value1) != 0;
 }
 

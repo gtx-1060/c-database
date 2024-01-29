@@ -23,8 +23,12 @@ typedef enum RequestFilterType {
     FILTER_AND_NODE,
     FILTER_OR_NODE,
     FILTER_LITERAL,
-    FILTER_VARIABLE
+    FILTER_VARIABLE,
+    FILTER_ALWAYS_TRUE,
+    FILTER_ALWAYS_FALSE
 } RequestFilterType;
+
+typedef RequestFilterType PredefinedFilterLeaf;
 
 typedef struct FilterNode {
     RequestFilterType type;
@@ -41,6 +45,8 @@ typedef struct FilterLeaf {
         uint16_t ind2;
         void* value;
     };
+    uint8_t switch_order;
+    uint8_t values_allocd;
 } FilterLeaf;
 
 typedef struct RowsIterator {
@@ -58,8 +64,9 @@ typedef struct RowsIterator {
 
 
 RowsIterator* create_rows_iterator(Storage* storage, const OpenedTable* table);
+RowsIterator* create_rows_iterator_inner(const OpenedTable* table, RowsIterator* outer_iter);
 
-int find_column_by_name(RowsIterator* iter, char* column, TableDatatype* type);
+int iterator_find_column_index(RowsIterator* iter, char* column, TableDatatype* type);
 void rows_iterator_set_filter(RowsIterator* iter, FilterNode* filter);
 FilterNode* rows_iterator_get_filter(RowsIterator* iter);
 

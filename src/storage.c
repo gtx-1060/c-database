@@ -121,10 +121,11 @@ void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
     char* table_name = HEAP_TABLES_NAME;
     RowsIterator* iter = create_rows_iterator(storage, &storage->tables);
     rows_iterator_add_filter(iter, equals_filter, table_name, "name");
-    rows_iterator_add_filter(iter, greater_filter, &str_len, "row_size");
+    rows_iterator_add_filter(iter, greater_eq_filter, &lower_bound, "row_size");
     rows_iterator_add_filter(iter, less_filter, &upper_bound, "row_size");
     // open heap table or if aren't create
     if (!map_table(storage, iter, heap_table)) {
+        printf("heap table created\n");
         TableScheme scheme = get_heap_table_scheme(str_len);
         Table* table = init_table(&scheme, HEAP_TABLES_NAME);
         write_table(storage, table, heap_table);
@@ -137,6 +138,7 @@ void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
         return;
     }
     heap_table->scheme = get_heap_table_scheme(str_len).fields;
+//    printf("heap table str size: %d, row size: %d", heap_table->scheme[1].max_sz, heap_table->mapped_addr->row_size);
     rows_iterator_free(iter);
 }
 
@@ -145,6 +147,7 @@ void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
 // ALSO INSERT STRINGS INTO HEAP_TABLE!
 void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void* array[]) {
     void* memory = malloc(table->mapped_addr->row_size);
+//    printf("row-size=%d\n", table->mapped_addr->row_size);
     char* pointer = (char*)memory;
     for (uint32_t i = 0; i < table->mapped_addr->fields_n; i++) {
         if (table->scheme[i].order != i) {
@@ -170,7 +173,10 @@ void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void
         uint16_t field_sz = table->scheme[i].max_sz;
         if (table->scheme[i].type == TABLE_FTYPE_CHARS) {
             memcpy(pointer, array[i], strlen(array[i])+1);
+//            printf("%d, %d\n", table->scheme[i].type, field_sz);
         } else {
+//            printf("%d, %d\n", table->scheme[i].type, field_sz);
+//            printf("p=%p\n", pointer);
             memcpy(pointer, array[i], field_sz);
         }
         pointer += field_sz;
@@ -246,6 +252,17 @@ RowReadStatus table_get_row_in_buff(Storage* storage, const OpenedTable* table, 
     }
     free_row(&row);
     return result;
+}
+
+// -1 if fails
+int table_find_index_of_column(const OpenedTable* table, char* column) {
+    for (SchemeItem* col = table->scheme;
+         col < table->scheme + table->mapped_addr->fields_n; col++) {
+        if (strcmp(col->name, column) == 0) {
+            return col->order;
+        }
+    }
+    return -1;
 }
 
 GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t page_ind, uint32_t row_ind) {

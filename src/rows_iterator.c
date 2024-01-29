@@ -26,9 +26,9 @@ RowsIterator* init(Storage* storage, const OpenedTable* table) {
     return req_iter;
 }
 
-// one iterator cant have multiple inner iterators!!
-RowsIterator* create_rows_iterator_inner(Storage* storage, const OpenedTable* table, RowsIterator* outer_iter) {
-    RowsIterator* iter = init(storage, table);
+// one iterator cant have multiple inner iterators at time!!
+RowsIterator* create_rows_iterator_inner(const OpenedTable* table, RowsIterator* outer_iter) {
+    RowsIterator* iter = init(outer_iter->storage, table);
     iter->outer = outer_iter;
     init_outer_iterator(iter);
     return iter;
@@ -42,11 +42,11 @@ void init_outer_iterator(RowsIterator* iter) {
     } else {
         iter->row_offset = iter->outer->row_size;
         iter->row_size += iter->row_offset;
-        iter->row = realloc(iter->outer->row, iter->row_size);
+        iter->row = realloc(iter->outer->row, sizeof(void*) * iter->row_size);
         if (iter->row == NULL)
             panic("Cannot realloc row (for join purpose)!", 5);
         iter->outer->row = iter->row;
-        memset(current_row(iter), 0, iter->table->mapped_addr->fields_n);
+        memset(current_row(iter), 0, sizeof(void*)*iter->table->mapped_addr->fields_n);
     }
 }
 
@@ -71,17 +71,12 @@ void rows_iterator_set_filter(RowsIterator* iter, FilterNode* filter) {
 
 // return index of column and its type
 // or -1 if not found
-int find_column_by_name(RowsIterator* iter, char* column, TableDatatype* type) {
-    for (SchemeItem* col = iter->table->scheme;
-            col < iter->table->scheme + iter->table->mapped_addr->fields_n; col++) {
-        if (strcmp(col->name, column) == 0) {
-            *type = col->type;
-            return iter->row_offset + col->order;
-        }
-    }
-    if (iter->outer)
-        return find_column_by_name(iter->outer, column, type);
-    return -1;
+int iterator_find_column_index(RowsIterator* iter, char* column, TableDatatype* type) {
+    int index = table_find_index_of_column(iter->table, column);
+    if (index < 0)
+        return -1;
+    *type = iter->table->scheme[index].type;
+    return iter->row_offset + index;
 }
 
 /*
@@ -98,12 +93,18 @@ uint8_t check_filters(FilterNode* filter, void* row[]) {
             return check_filters(filter->l, row) || check_filters(filter->r, row);
         case FILTER_LITERAL: {
             FilterLeaf* leaf = (FilterLeaf*)filter;
+            if (leaf->switch_order)
+                return leaf->predicate(leaf->datatype, leaf->value, row[leaf->ind1]);
             return leaf->predicate(leaf->datatype, row[leaf->ind1], leaf->value);
         }
         case FILTER_VARIABLE: {
             FilterLeaf* leaf = (FilterLeaf*)filter;
             return leaf->predicate(leaf->datatype, row[leaf->ind1], row[leaf->ind2]);
         }
+        case FILTER_ALWAYS_FALSE:
+            return 0;
+        case FILTER_ALWAYS_TRUE:
+            return 1;
     }
     panic("cant parse iterator filters", 5);
     return 0;
@@ -129,12 +130,14 @@ RowsIteratorResult rows_iterator_next(RowsIterator* iter) {
                 iter->page_pointer = next_page_index(&iter->storage->manager, iter->page_pointer);
                 iter->row_pointer = 0;
                 if (iter->page_pointer == 0) {
-                    if (iter->source == TABLE_FREE_LIST) {
+                    if (iter->source == TABLE_FREE_LIST && iter->table->mapped_addr->first_full_pg) {
                         iter->source = TABLE_FULL_LIST;
                         iter->page_pointer = iter->table->mapped_addr->first_full_pg;
                     } else if (iter->outer && rows_iterator_next(iter->outer) == REQUEST_ROW_FOUND) {
                         iter->page_pointer = iter->table->mapped_addr->first_free_pg;
                         iter->source = TABLE_FREE_LIST;
+                    } else {
+                        return REQUEST_SEARCH_END;
                     }
                 }
                 break;
@@ -166,7 +169,7 @@ void rows_iterator_update_current(RowsIterator* iter, void** row) {
         }
     }
     table_replace_row(iter->storage, iter->table, iter->page_pointer, iter->row_pointer-1,
-                      current_row(iter));
+                      row);
 }
 
 void free_filters(FilterNode* filter) {
@@ -175,6 +178,8 @@ void free_filters(FilterNode* filter) {
     if (filter->type == FILTER_AND_NODE || filter->type == FILTER_OR_NODE) {
         free_filters(filter->l);
         free_filters(filter->r);
+    } else if (filter->type == FILTER_LITERAL && ((FilterLeaf*)filter)->values_allocd) {
+        free(((FilterLeaf*)filter)->value);
     }
     free(filter);
 }
