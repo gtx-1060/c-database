@@ -11,8 +11,8 @@
 void unmap_chunk(Chunk* chunk);
 void free_chunk(Chunk* chunk);
 
+// platform specific code for win support
 #if defined(WIN) && !defined(resize_mapping)
-
     HANDLE win_create_mapping(uint32_t pages, HANDLE filehandle) {
         uint64_t size = SYS_PAGE_SIZE * pages;
         return CreateFileMappingW(
@@ -83,7 +83,7 @@ MemoryManager init_memory_manager(int fd) {
     GetSystemInfo(&inf);
     manager.alloc_gran = inf.dwAllocationGranularity / SYS_PAGE_SIZE;
 #else
-    manager.alloc_gran = ALLOC_GRAN;
+    manager.alloc_gran = DEFAULT_ALLOC_GRAN;
 #endif
 
     return manager;
@@ -105,7 +105,7 @@ void unmap_chunk(Chunk* chunk) {
     chunk->pointer = NULL;
 }
 
-void realloc_chunk(MemoryManager* manager, Chunk *chunk, uint32_t new_offset, uint32_t new_size) {
+static void realloc_chunk(MemoryManager* manager, Chunk *chunk, uint32_t new_offset, uint32_t new_size) {
     unmap_chunk(chunk);
     uint32_t need_file_size = ((new_size+new_offset) / manager->alloc_gran + 1) * manager->alloc_gran;
     chunk->offset = (new_offset / manager->alloc_gran) * manager->alloc_gran;
@@ -133,7 +133,7 @@ void realloc_chunk(MemoryManager* manager, Chunk *chunk, uint32_t new_offset, ui
     }
 }
 
-Chunk* alloc_chunk(MemoryManager* manager, uint32_t offset, uint32_t pages) {
+static Chunk* alloc_chunk(MemoryManager* manager, uint32_t offset, uint32_t pages) {
     Chunk* chunk = malloc(sizeof(struct Chunk));
     chunk->id = manager->chunks_ind++;
     chunk->pointer = NULL;
@@ -144,7 +144,7 @@ Chunk* alloc_chunk(MemoryManager* manager, uint32_t offset, uint32_t pages) {
     return chunk;
 }
 
-Chunk* get_chunk_with(MemoryManager* manager, uint32_t offset, uint32_t pages) {
+static Chunk* get_chunk_with(MemoryManager* manager, uint32_t offset, uint32_t pages) {
     Chunk* chunk = manager->chunk_list;
     do {
         if ((chunk->offset <= offset) && (chunk->size >= pages)
@@ -166,9 +166,13 @@ UserChunk load_chunk(MemoryManager* manager, uint32_t offset, uint32_t pages) {
     return user_chunk;
 }
 
+void remove_chunk(UserChunk* chunk) {
+    free_chunk(chunk->backing_chunk);
+}
+
 void free_chunk(Chunk* chunk) {
     if (chunk->refs == 0) {
-        panic("chnk refs is 0!", 1);
+        panic("chnk refs number is 0!", 1);
     } else if (chunk->refs == 1) {
         unmap_chunk(chunk);
         lst_remove(&chunk->list);
@@ -176,10 +180,6 @@ void free_chunk(Chunk* chunk) {
         return;
     }
     chunk->refs--;
-}
-
-void remove_chunk(MemoryManager* manager, UserChunk* chunk) {
-    free_chunk(chunk->backing_chunk);
 }
 
 void* get_pages(MemoryManager* manager, uint32_t offset, uint32_t pages) {

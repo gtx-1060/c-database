@@ -9,7 +9,7 @@
 void init_outer_iterator(RowsIterator* iter);
 void** current_row(RowsIterator* iter);
 
-RowsIterator* init(Storage* storage, const OpenedTable* table) {
+static RowsIterator* init(Storage* storage, const OpenedTable* table) {
     RowsIterator* req_iter = malloc(sizeof(RowsIterator));
     req_iter->row = NULL;
     req_iter->outer = NULL;
@@ -26,7 +26,7 @@ RowsIterator* init(Storage* storage, const OpenedTable* table) {
     return req_iter;
 }
 
-// one iterator cant have multiple inner iterators at time!!
+// one iterator cant have multiple inner iterators at time!
 RowsIterator* create_rows_iterator_inner(const OpenedTable* table, RowsIterator* outer_iter) {
     RowsIterator* iter = init(outer_iter->storage, table);
     iter->outer = outer_iter;
@@ -83,7 +83,7 @@ int iterator_find_column_index(RowsIterator* iter, char* column, TableDatatype* 
  * Always extend row with values f outer scope iterator
  * Pass into the filter ext_row + ind1 + ind2 if variable comparison
  */
-uint8_t check_filters(FilterNode* filter, void* row[]) {
+static uint8_t check_filters(FilterNode* filter, void* row[]) {
     if (!filter)
         return 1;
     switch (filter->type) {

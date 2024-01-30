@@ -13,7 +13,7 @@
 void create_scheme_table(Storage *storage);
 
 // must be called at first!
-RowWriteStatus create_tables_table(Storage *storage) {
+static RowWriteStatus create_tables_table(Storage *storage) {
     PageMeta pg = storage_add_page(storage, 1, sizeof(TableRecord));
     if (pg.offset != RESERVED_TO_FILE_META) {
         panic("TABLE FOR TABLES CREATED AT NON-FIRST DATA PAGE", 6);
@@ -41,7 +41,7 @@ RowWriteStatus create_tables_table(Storage *storage) {
 
 // returns 1 if table exists
 // 0 if nothing to load
-void open_tables_table(Storage* storage) {
+static void open_tables_table(Storage* storage) {
     storage->tables.scheme = get_table_of_tables_scheme().fields;
     TableRecord stub = {
             .first_free_pg = RESERVED_TO_FILE_META,
@@ -61,7 +61,7 @@ void open_tables_table(Storage* storage) {
 }
 
 
-void create_new_storage(Storage* storage, char* filename) {
+static void create_new_storage(Storage* storage, char* filename) {
     int fd = open(filename, O_RDWR | O_CREAT, 0777);
     if (fd == -1) {
         panic("cant create database file!", 6);
@@ -95,7 +95,7 @@ void create_scheme_table(Storage *storage) {
     free(st);
 }
 
-void open_scheme_table(Storage *storage) {
+static void open_scheme_table(Storage *storage) {
     RowsIterator* iter = create_rows_iterator(storage, &storage->tables);
     char* scheme_table_name = "scheme_table";
     rows_iterator_add_filter(iter, equals_filter, scheme_table_name, "name");
@@ -131,10 +131,10 @@ Storage* init_storage(char* filename) {
 }
 
 void close_storage(Storage* storage) {
-    close_table(storage, &storage->scheme_table);
-    close_table(storage, &storage->free_page_table);
-    close_table(storage, &storage->tables);
-    remove_chunk(&storage->manager, &storage->header_chunk);
+    close_table(&storage->scheme_table);
+    close_table(&storage->free_page_table);
+    close_table(&storage->tables);
+    remove_chunk(&storage->header_chunk);
     close(storage->manager.file_descriptor);
     destroy_memory_manager(&storage->manager);
     free(storage);

@@ -96,7 +96,7 @@ FilterNode* create_filter_or(FilterNode* l, FilterNode* r) {
 // -1 means value2 < row[ind]
 // 0 means eq
 // 1 means value2 > row[ind]
-int compare_field_value(TableDatatype type, void* value1, void* value2) {
+static int compare_field_value(TableDatatype type, void* value1, void* value2) {
     switch (type) {
         case TABLE_FTYPE_INT_32:
             if (*(int32_t*)value2 < *(int32_t*)value1)
@@ -128,6 +128,8 @@ int compare_field_value(TableDatatype type, void* value1, void* value2) {
         default:
             panic("CANT COMPARE THIS TYPE", 6);
     }
+    // just for sanitizers
+    return 0;
 }
 
 uint8_t equals_filter(TableDatatype type, void* value1, void* value2) {
@@ -139,11 +141,11 @@ uint8_t not_equals_filter(TableDatatype type, void* value1, void* value2) {
 }
 
 // just random predicate for stress testing purpose
-uint8_t random_filter(TableDatatype type, void* value1, void* value2) {
+uint8_t random_filter(__attribute__((unused)) TableDatatype type, void* value1, __attribute__((unused)) void* value2) {
     float r = (float)rand()/(float)RAND_MAX;
-//    printf("rand = %f, %f\n", r, *(float*)value);
     return r < *(float*)value1;
 }
+
 
 uint8_t greater_filter(TableDatatype type, void* value1, void* value2) {
     return compare_field_value(type, value1, value2) == -1;
@@ -162,11 +164,15 @@ uint8_t less_eq_filter(TableDatatype type, void* value1, void* value2) {
 }
 
 uint8_t substring_of(TableDatatype type, void* value1, void* value2) {
-    char* ch1 = value1;
-    char* ch2 = value2;
+    if (type != TABLE_FTYPE_STRING && type != TABLE_FTYPE_CHARS) {
+        panic("wrong type", 6);
+    }
     return strstr(value2, value1) != 0;
 }
 
 uint8_t in_string(TableDatatype type, void* value1, void* value2) {
+    if (type != TABLE_FTYPE_STRING && type != TABLE_FTYPE_CHARS) {
+        panic("wrong type", 6);
+    }
     return strstr(value1, value2) != 0;
 }

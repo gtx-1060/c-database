@@ -12,8 +12,7 @@ static uint8_t table_field_type_sizes[] = {
         [TABLE_FTYPE_STRING] = 8,       // sz = uint32 page_number + uint32 row_number
         [TABLE_FTYPE_BOOL] = 1,
         [TABLE_FTYPE_BYTE] = 1,
-//        [TABLE_FTYPE_FOREIGN_KEY] = 8,   // sz = uint32 page_number + uint32 row_number
-        [TABLE_FTYPE_CHARS] = 0,          // must be set by hands
+        [TABLE_FTYPE_CHARS] = 0,        // must be set by hands
 };
 
 TableScheme create_table_scheme(uint16_t fields_n) {
@@ -61,8 +60,4 @@ void free_scheme(SchemeItem* scheme, size_t length) {
             free(scheme[i].name);
     }
     free(scheme);
-}
-
-int get_datatype_size(TableDatatype type) {
-    return table_field_type_sizes[type];
 }

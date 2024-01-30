@@ -7,7 +7,7 @@
 #include "join.h"
 #include "search_filters.h"
 
-uint8_t find_field_in_scheme(OpenedTable* table, char* field, uint16_t* dest) {
+static uint8_t find_field_in_scheme(OpenedTable* table, char* field, uint16_t* dest) {
     for (uint16_t i = 0; i < table->mapped_addr->fields_n; i++) {
         if (strcmp(table->scheme[i].name, field) == 0) {
             *dest = i;

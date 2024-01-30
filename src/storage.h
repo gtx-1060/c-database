@@ -72,12 +72,7 @@ PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size);
 
 void create_table(Storage* storage, Table* table, OpenedTable* dest);
 uint8_t open_table(Storage* storage, char* name, OpenedTable* dest);
-void close_table(Storage* storage, OpenedTable* table);
-
-//Table* get_all_tables(const MemoryManager* memory, uint16_t* number);
-
-//void table_remove_record(const MemoryManager* memory, Table* table, FieldValue predicate);
-
+void close_table(OpenedTable* table);
 
 
 #endif //LAB1_STORAGE_H

@@ -50,7 +50,7 @@ void destruct_table(Table* table) {
 
 // PREDEFINED SCHEMES \/
 
-TableScheme get_table_of_tables_scheme() {
+TableScheme get_table_of_tables_scheme(void) {
     TableScheme scheme = create_table_scheme(7);
     add_scheme_field(&scheme, "name", TABLE_FTYPE_CHARS, 0);
     set_last_field_size(&scheme, 32);
@@ -63,7 +63,7 @@ TableScheme get_table_of_tables_scheme() {
     return scheme;
 }
 
-TableScheme get_scheme_table_scheme() {
+TableScheme get_scheme_table_scheme(void) {
     TableScheme scheme = create_table_scheme(5);
     add_scheme_field(&scheme, "name", TABLE_FTYPE_STRING, 0);
     add_scheme_field(&scheme, "type", TABLE_FTYPE_BYTE, 0);

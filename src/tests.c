@@ -2,16 +2,36 @@
 #include <stdio.h>
 #include "storage.h"
 #include "search_filters.h"
-#include "util.h"
-#include "tests.h"
+#include "storage_intlzr.h"
 
+static void insert_n_rows(Storage* storage, OpenedTable* table1, int t_number);
+static void delete_random(Storage* storage, OpenedTable* table1,float chance);
 
-void insert_n_rows(Storage* storage, OpenedTable* table1, int t_number);
-void delete_random(Storage* storage, OpenedTable* table1,float chance);
+__attribute__((unused)) static void test_insert_delete(Storage* storage, OpenedTable* table1);
 
 static char* s = "test string 123123 test string 123123 test string 123123 ";
 
-void test_delete(Storage* storage, OpenedTable* table1) {
+int main(void) {
+    Storage* storage = init_storage("/home/vlad/Music/dbfile");
+    OpenedTable table;
+
+    // open table or create if not exists
+    if (!open_table(storage, "test_table", &table)) {
+        TableScheme scheme = create_table_scheme(4);
+        add_scheme_field(&scheme, "one", TABLE_FTYPE_FLOAT, 1);
+        add_scheme_field(&scheme, "two", TABLE_FTYPE_INT_32, 1);
+        add_scheme_field(&scheme, "three", TABLE_FTYPE_STRING, 1);
+        add_scheme_field(&scheme, "four", TABLE_FTYPE_UINT_16, 1);
+        Table* table_wizard = init_table(&scheme, "test_table");
+        create_table(storage, table_wizard, &table);
+        destruct_table(table_wizard);
+    }
+    close_table(&table);
+    close_storage(storage);
+    return 0;
+}
+
+__attribute__((unused)) static void test_delete(Storage* storage, OpenedTable* table1) {
     clock_t t1;
     RowsIterator* iter;
     for (int i = 20 ; i < 200; i++) {
@@ -26,7 +46,7 @@ void test_delete(Storage* storage, OpenedTable* table1) {
     }
 }
 
-void test_insert_delete(Storage* storage, OpenedTable* table1) {
+__attribute__((unused)) static void test_insert_delete(Storage* storage, OpenedTable* table1) {
     FILE* insert_test = fopen("/home/vlad/Music/insert.csv", "w+");
     FILE* remove_test = fopen("/home/vlad/Music/remove.csv", "w+");
     clock_t t1;
@@ -46,7 +66,7 @@ void test_insert_delete(Storage* storage, OpenedTable* table1) {
     fclose(remove_test);
 }
 
-void delete_random(Storage* storage, OpenedTable* table1,float chance) {
+static void delete_random(Storage* storage, OpenedTable* table1,float chance) {
     RowsIterator* iter = create_rows_iterator(storage, table1);
     rows_iterator_add_filter(iter, random_filter, &chance, "four");
     int counter = 0;
@@ -54,11 +74,11 @@ void delete_random(Storage* storage, OpenedTable* table1,float chance) {
         rows_iterator_remove_current(iter);
         counter++;
     }
-//    printf("chance %f removed %d\n", chance, counter);
+    printf("chance %f removed %d\n", chance, counter);
     rows_iterator_free(iter);
 }
 
-void insert_n_rows(Storage* storage, OpenedTable* table1, int t_number) {
+static void insert_n_rows(Storage* storage, OpenedTable* table1, int t_number) {
     float f = 234.234f;
     uint16_t ui = 1;
     for (int i = 0; i < t_number; i++) {

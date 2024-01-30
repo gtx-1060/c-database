@@ -40,8 +40,8 @@ void destruct_table(Table* table);
 
 int get_datatype_size(TableDatatype type);
 
-TableScheme get_table_of_tables_scheme();
-TableScheme get_scheme_table_scheme();
+TableScheme get_table_of_tables_scheme(void);
+TableScheme get_scheme_table_scheme(void);
 TableScheme get_heap_table_scheme(uint32_t str_len);
 uint16_t get_nearest_heap_size(uint32_t str_len);
 

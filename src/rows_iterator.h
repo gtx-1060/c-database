@@ -75,4 +75,6 @@ void rows_iterator_remove_current(RowsIterator* iter);
 void rows_iterator_update_current(RowsIterator* iter, void** row);
 void rows_iterator_free(RowsIterator* iter);
 
+void free_filters(FilterNode* filter);
+
 #endif //LAB1_ROWS_ITERATOR_H

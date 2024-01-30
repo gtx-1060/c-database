@@ -44,23 +44,20 @@ void write_page_meta(MemoryManager* manager, PageMeta* header) {
     *pointer = page;
 }
 
-// maybe it works, maybe not
-uint32_t rows_number(const PageMeta* header) {
+static uint32_t get_rows_number(const PageMeta* header) {
     // x = (pg_size - header_size - ceil(x/8)) / row_size
     // x * (row_size + 0.125) = pg_size - header_size
     // x = (pg_size - header_size) / (row_size + 0.125)
     double sz_without_header = (double)(header->scale*SYS_PAGE_SIZE - sizeof(PageRecord));
-    double dwede = ((double)header->row_size+0.125);
-    double res = floor(sz_without_header / dwede);
-    return (uint32_t)floor((double)(header->scale*SYS_PAGE_SIZE - sizeof(PageRecord)) / ((double)header->row_size+0.125));
+    return (uint32_t)floor(sz_without_header / ((double)header->row_size+0.125));
 }
 
-uint32_t get_bitmap_size(const PageMeta* header) {
-    uint32_t rows = rows_number(header);
+static uint32_t get_bitmap_size(const PageMeta* header) {
+    uint32_t rows = get_rows_number(header);
     return (rows / 8) + (rows % 8 != 0);
 }
 
-uint32_t get_header_size(const PageMeta* header) {
+static uint32_t get_header_size(const PageMeta* header) {
     return sizeof(PageRecord) + get_bitmap_size(header);
 }
 
@@ -72,7 +69,7 @@ uint32_t page_actual_size(uint32_t row_size, uint16_t page_scale) {
 
 // offset from start of the page
 // to the first row of pointer
-uint32_t first_row_offset(const PageMeta* header) {
+static uint32_t first_row_offset(const PageMeta* header) {
     return get_header_size(header);
 }
 
@@ -90,11 +87,11 @@ uint32_t create_page(MemoryManager* manager, const PageMeta* header) {
         return 0; // ERROR
     PageRecord page = {.next=header->next, .row_size=header->row_size, .scale=header->scale};
     *((PageRecord*)mem) = page;
-//    uint16_t bytes_for_bitmap = ceil(((double)rows_number(header))/8);
+//    uint16_t bytes_for_bitmap = ceil(((double)get_rows_number(header))/8);
     return header->offset + header->scale;
 }
 
-int8_t set_into_bitmap(uint8_t* page, uint32_t index, uint8_t value) {
+static int8_t set_into_bitmap(uint8_t* page, uint32_t index, uint8_t value) {
     uint8_t* bitmap_pointer = page + sizeof(PageRecord) + (index / 8);
     uint8_t mask = (uint8_t)pow(2, (7-index) % 8);
     uint8_t masked = mask & (*bitmap_pointer);
@@ -109,13 +106,13 @@ int8_t set_into_bitmap(uint8_t* page, uint32_t index, uint8_t value) {
     return 1;
 }
 
-uint8_t is_row_empty(const uint8_t* page, uint32_t row_index) {
-    return !((*(page + sizeof(PageRecord) + (row_index / 8)) << (row_index % 8)) & 0b10000000);
+static uint8_t is_row_empty(const uint8_t* page, uint32_t row_index) {
+    return !((*(page + sizeof(PageRecord) + (row_index / 8)) << (row_index % 8)) & 0x80);
 }
 
 RowReadStatus read_row(MemoryManager* manager, const PageMeta* header, PageRow* dest) {
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
-    if (dest->index >= rows_number(header))
+    if (dest->index >= get_rows_number(header))
         return READ_ROW_OUT_OF_BOUND;
     if (is_row_empty(page, dest->index))
         return READ_ROW_IS_NULL;
@@ -135,7 +132,7 @@ void free_row(PageRow* row) {
 }
 
 RowWriteStatus replace_row(MemoryManager* manager, const PageMeta* header, const PageRow* row) {
-    if (row->index >= rows_number(header))
+    if (row->index >= get_rows_number(header))
         return WRITE_ROW_OUT_OF_BOUND;
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
     // it may confuse, but it means row was empty
@@ -147,7 +144,7 @@ RowWriteStatus replace_row(MemoryManager* manager, const PageMeta* header, const
 }
 
 RowWriteStatus write_row(MemoryManager* manager, const PageMeta* header, const PageRow* row) {
-    uint32_t rows = rows_number(header);
+    uint32_t rows = get_rows_number(header);
     if (row->index >= rows)
         return WRITE_ROW_OUT_OF_BOUND;
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
@@ -162,7 +159,7 @@ RowWriteStatus write_row(MemoryManager* manager, const PageMeta* header, const P
     return WRITE_ROW_OK;
 }
 
-uint8_t is_page_empty(MemoryManager* manager, const PageMeta* header) {
+static uint8_t is_page_empty(MemoryManager* manager, const PageMeta* header) {
     uint8_t* page = (uint8_t*)get_pages(manager, header->offset, 1) + sizeof(PageRecord);
     for (uint8_t* p = page; p < page + get_bitmap_size(header); p++) {
         if (*p != 0)
@@ -172,7 +169,7 @@ uint8_t is_page_empty(MemoryManager* manager, const PageMeta* header) {
 }
 
 RowRemoveStatus remove_row(MemoryManager* manager, const PageMeta* header, uint32_t row_ind) {
-    if (row_ind >= rows_number(header))
+    if (row_ind >= get_rows_number(header))
         return REMOVE_ROW_OUT_OF_BOUND;
     int64_t empty_row = find_empty_row(manager, header);
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, header->scale);
@@ -189,10 +186,10 @@ RowRemoveStatus remove_row(MemoryManager* manager, const PageMeta* header, uint3
 // return -1 if not row
 int64_t find_empty_row(MemoryManager* manager, const PageMeta* header) {
     uint8_t* page = (uint8_t*) get_pages(manager, header->offset, 1);
-    uint32_t rows_n = rows_number(header);
+    uint32_t rows_n = get_rows_number(header);
     uint32_t i = 0;
     for (uint8_t* bitmap = page + sizeof(PageRecord); bitmap < page+sizeof(PageRecord)+get_bitmap_size(header); bitmap++) {
-        uint8_t mask = 0b10000000;
+        uint8_t mask = 0x80;    // 0b10000000
         uint8_t in_byte = 0;
         do {
             if (((*bitmap) & mask) == 0)
@@ -229,7 +226,7 @@ void print_bitmap(MemoryManager* manager, uint32_t offset) {
     uint32_t i = 0;
     printf("bitmap full rows: [");
     for (uint8_t* bitmap = page + sizeof(PageRecord); bitmap < page+sizeof(PageRecord)+get_bitmap_size(&header); bitmap++) {
-        uint8_t mask = 0b10000000;
+        uint8_t mask = 0x80;    // 0b10000000
         uint8_t in_byte = 0;
         do {
             if (((*bitmap) & mask) != 0)

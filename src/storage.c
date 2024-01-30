@@ -9,8 +9,6 @@
 #include "util.h"
 #include "search_filters.h"
 
-void write_table(Storage* storage, Table* table, OpenedTable* dest);
-
 FileHeader* get_header(Storage* storage) {
     return (FileHeader*)chunk_get_pointer(&storage->header_chunk);
 }
@@ -44,7 +42,7 @@ PageMeta storage_add_page(Storage* storage, uint16_t scale, uint32_t row_size) {
     return page;
 }
 
-void remove_from_table_list(Storage* storage, PageMeta* page, uint32_t* list_start) {
+static void remove_from_table_list(Storage* storage, PageMeta* page, uint32_t* list_start) {
     if (page->prev == 0) {
         if (page->offset != *list_start) {
             panic("PAGE HAD .PREV=0, BUT NOT FIRST IN THE FREE_LST", 4);
@@ -57,7 +55,7 @@ void remove_from_table_list(Storage* storage, PageMeta* page, uint32_t* list_sta
         map_page_header(&storage->manager, page->next)->prev = page->prev;
 }
 
-void push_to_table_list(Storage* storage, PageMeta* page, uint32_t* list_start) {
+static void push_to_table_list(Storage* storage, PageMeta* page, uint32_t* list_start) {
     // if dest_list is empty
     if (*list_start == 0) {
         *list_start = page->offset;
@@ -79,7 +77,7 @@ void push_to_table_list(Storage* storage, PageMeta* page, uint32_t* list_start) 
     write_page_meta(&storage->manager, &list_page);
 }
 
-void move_page_to_full_list(Storage* storage, PageMeta* page, const OpenedTable* table) {
+static void move_page_to_full_list(Storage* storage, PageMeta* page, const OpenedTable* table) {
     // check whatever it's full
     if (find_empty_row(&storage->manager, page) != -1) {
         panic("ATTEMPT TO MOVE NOT FULL PAGE INTO FULL_LIST", 4);
@@ -92,7 +90,7 @@ void move_page_to_full_list(Storage* storage, PageMeta* page, const OpenedTable*
     table->mapped_addr->first_full_pg = ffup;
 }
 
-void move_page_to_free_list(Storage* storage, PageMeta* page, const OpenedTable* table) {
+static void move_page_to_free_list(Storage* storage, PageMeta* page, const OpenedTable* table) {
     // check whatever it's full
     if (find_empty_row(&storage->manager, page) == -1) {
         panic("ATTEMPT TO MOVE FULL PAGE INTO FREE_LIST", 4);
@@ -105,7 +103,7 @@ void move_page_to_free_list(Storage* storage, PageMeta* page, const OpenedTable*
     table->mapped_addr->first_free_pg = ffrp;
 }
 
-PageMeta create_table_page(Storage* storage, const OpenedTable* table) {
+static PageMeta create_table_page(Storage* storage, const OpenedTable* table) {
     PageMeta pg = storage_add_page(storage, table->mapped_addr->page_scale, table->mapped_addr->row_size);
     uint32_t ffrp = table->mapped_addr->first_free_pg;
     push_to_table_list(storage, &pg, &ffrp);
@@ -113,7 +111,7 @@ PageMeta create_table_page(Storage* storage, const OpenedTable* table) {
     return pg;
 }
 
-void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
+static void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str_len) {
     // we need heap_table with at least
     // row_size >  + size(str_len) + size(str) + size(table_id)
     size_t lower_bound = sizeof(uint16_t) + str_len + sizeof(uint16_t);
@@ -161,7 +159,7 @@ void* prepare_row_for_insertion(Storage* storage, const OpenedTable* table, void
             void* data[] = {&str_len, array[i], &heap_table.mapped_addr->table_id};
             // insert string into table and close it
             InsertRowResult result = table_insert_row(storage, &heap_table, data);
-            close_table(storage, &heap_table);
+            close_table(&heap_table);
             // copy (page_id,row_id) into memory to insert in target table
             memcpy(pointer, &result.page_id, sizeof(uint32_t));
             pointer += sizeof(uint32_t);
@@ -277,7 +275,7 @@ GetRowResult table_get_row(Storage* storage, const OpenedTable* table, uint32_t 
     return result;
 }
 
-void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_header, uint32_t offset_in_row) {
+static void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_header, uint32_t offset_in_row) {
     // get row to take heap page index and row with string
     PageRow row = {.index = row_ind};
     read_row(&storage->manager, pg_header, &row);
@@ -306,10 +304,10 @@ void remove_str_from_heap(Storage *storage, uint32_t row_ind, PageMeta *pg_heade
     heap_table.scheme = get_heap_table_scheme(str_len).fields;
     rows_iterator_free(iter);
     table_remove_row(storage, &heap_table, str_page_ind, str_row_ind);
-    close_table(storage, &heap_table);
+    close_table(&heap_table);
 }
 
-void handle_page_freed(Storage* storage, const OpenedTable* table, PageMeta* pg) {
+static void handle_page_freed(Storage* storage, const OpenedTable* table, PageMeta* pg) {
     uint32_t pi = table->mapped_addr->first_free_pg;
     remove_from_table_list(storage, pg, &pi);
     table->mapped_addr->first_free_pg = pi;
@@ -328,7 +326,6 @@ void table_remove_row(Storage* storage, const OpenedTable* table, uint32_t page_
         pointer += table->scheme[i].max_sz;
     }
     RowRemoveStatus result = remove_row(&storage->manager, &pg_header, row_ind);
-//    print_bitmap(&storage->manager, page_ind);
     switch (result) {
         case REMOVE_ROW_OUT_OF_BOUND:
         case REMOVE_BITMAP_ERROR:
@@ -392,7 +389,7 @@ uint8_t map_table(Storage* storage, RowsIterator* iter, OpenedTable* dest) {
 
 // call it after creating mapping for the table
 // using map_table(...) function
-uint8_t table_load_scheme(Storage* storage, OpenedTable* dest) {
+static uint8_t table_load_scheme(Storage* storage, OpenedTable* dest) {
     TableScheme scheme = create_table_scheme(dest->mapped_addr->fields_n);
     RowsIterator* iter = create_rows_iterator(storage, &storage->scheme_table);
     rows_iterator_add_filter(iter, equals_filter, &dest->mapped_addr->table_id, "table_id");
@@ -449,7 +446,7 @@ void write_table(Storage* storage, Table * table, OpenedTable* dest) {
     }
 }
 
-void write_table_scheme(Storage* storage, Table* table, uint16_t table_id) {
+static void write_table_scheme(Storage* storage, Table* table, uint16_t table_id) {
     for (uint16_t i = 0; i < table->fields_n; i++) {
         SchemeItem* field = table->fields+i;
         void* row[] = {field->name, &field->type, &field->nullable, &i, &table_id};
@@ -471,9 +468,9 @@ void create_table(Storage* storage, Table* table, OpenedTable* dest) {
     table_load_scheme(storage, dest);
 }
 
-void close_table(Storage* storage, OpenedTable* table) {
+void close_table(OpenedTable* table) {
     free_scheme(table->scheme, table->mapped_addr->fields_n);
-    remove_chunk(&storage->manager, &table->chunk);
+    remove_chunk(&table->chunk);
 }
 
 void free_row_content(uint16_t fields, void** row) {

@@ -45,7 +45,7 @@ void
 lst_print(struct List *lst)
 {
     for (struct List *p = lst->next; p != lst; p = p->next) {
-        printf(" %p", p);
+        printf(" %p", (void*)p);
     }
     printf("\n");
 }
