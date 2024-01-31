@@ -1,8 +1,8 @@
 #include <stdio.h>
 
-#include "storage_intlzr.h"
-#include "storage.h"
-#include "search_filters.h"
+#include "../storage_intlzr.h"
+#include "../storage.h"
+#include "../search_filters.h"
 
 void insert_rows_example(Storage* storage, OpenedTable* table);
 void select_rows_example(Storage* storage, OpenedTable* table, uint8_t with_filter);
@@ -23,13 +23,17 @@ int main(void) {
         Table* table_wizard = init_table(&scheme, "test_table");
         create_table(storage, table_wizard, &table);
         destruct_table(table_wizard);
+        printf("Table created!\n");
     }
 
     insert_rows_example(storage, &table);
-    select_rows_example(storage, &table, 0);
+    printf("Inserted!\n");
     select_rows_example(storage, &table, 1);
+    printf("Selected!\n");
     update_rows_example(storage, &table);
+    printf("Updated!\n");
     remove_rows_example(storage, &table);
+    printf("Removed!\n");
 
     // close table
     close_table(&table);
@@ -40,7 +44,7 @@ int main(void) {
 void insert_rows_example(Storage* storage, OpenedTable* table) {
     float f = 234.234f;
     uint16_t ui = 1;
-    char* s = "string! for tests!";
+    char* s = "<string! for tests!>";
     for (int i = 0; i < 100; i++) {
         void *row[] = {&f, &i, s, &ui};
         table_insert_row(storage, table, row);

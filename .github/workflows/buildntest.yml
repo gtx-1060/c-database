@@ -1,0 +1,23 @@
+name: build and run simple test
+
+on:
+  push:
+    branches: [master, main]
+  pull-request:
+    branches: [master, main]
+
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install gcc
+        run: apt update && apt install sudo
+      - run: sudo apt install gcc
+      - name: create build env
+        run: cmake -Bbuild
+      - name: build
+        run: cmake --build build
+      - name: run tests
+        run: ctest --test-dir build
+             

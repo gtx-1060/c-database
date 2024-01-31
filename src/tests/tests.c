@@ -1,8 +1,8 @@
 #include <time.h>
 #include <stdio.h>
-#include "storage.h"
-#include "search_filters.h"
-#include "storage_intlzr.h"
+#include "../storage.h"
+#include "../search_filters.h"
+#include "../storage_intlzr.h"
 
 static void insert_n_rows(Storage* storage, OpenedTable* table1, int t_number);
 static void delete_random(Storage* storage, OpenedTable* table1,float chance);
