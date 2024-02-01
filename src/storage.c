@@ -123,7 +123,6 @@ static void get_heap_table(Storage* storage, OpenedTable* heap_table, size_t str
     rows_iterator_add_filter(iter, less_filter, &upper_bound, "row_size");
     // open heap table or if aren't create
     if (!map_table(storage, iter, heap_table)) {
-        printf("heap table created\n");
         TableScheme scheme = get_heap_table_scheme(str_len);
         Table* table = init_table(&scheme, HEAP_TABLES_NAME);
         write_table(storage, table, heap_table);

@@ -6,30 +6,9 @@
 
 static void insert_n_rows(Storage* storage, OpenedTable* table1, int t_number);
 static void delete_random(Storage* storage, OpenedTable* table1,float chance);
-
 __attribute__((unused)) static void test_insert_delete(Storage* storage, OpenedTable* table1);
 
 static char* s = "test string 123123 test string 123123 test string 123123 ";
-
-int main(void) {
-    Storage* storage = init_storage("/home/vlad/Music/dbfile");
-    OpenedTable table;
-
-    // open table or create if not exists
-    if (!open_table(storage, "test_table", &table)) {
-        TableScheme scheme = create_table_scheme(4);
-        add_scheme_field(&scheme, "one", TABLE_FTYPE_FLOAT, 1);
-        add_scheme_field(&scheme, "two", TABLE_FTYPE_INT_32, 1);
-        add_scheme_field(&scheme, "three", TABLE_FTYPE_STRING, 1);
-        add_scheme_field(&scheme, "four", TABLE_FTYPE_UINT_16, 1);
-        Table* table_wizard = init_table(&scheme, "test_table");
-        create_table(storage, table_wizard, &table);
-        destruct_table(table_wizard);
-    }
-    close_table(&table);
-    close_storage(storage);
-    return 0;
-}
 
 __attribute__((unused)) static void test_delete(Storage* storage, OpenedTable* table1) {
     clock_t t1;

@@ -17,6 +17,9 @@ Table* init_table(const TableScheme* scheme, const char* name) {
     table->fields = scheme->fields;
     table->fields_n = scheme->capacity;
     table->row_size = 0;
+    if (scheme->capacity != scheme->size) {
+        panic("wrong scheme size!", 3);
+    }
     for (SchemeItem* field = table->fields; field < table->fields + table->fields_n; field++) {
         if  (field->type == 0 || strlen(field->name) == 0)
             panic("INCORRECT SCHEME DATA", 3);          // TODO: USE OPERATION STATUS INSTEAD OF PANIC

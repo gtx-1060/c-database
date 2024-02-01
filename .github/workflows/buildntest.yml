@@ -18,7 +18,7 @@ jobs:
       - name: build
         run: cmake --build build
       - name: run tests
-        run: ctest --test-dir build
+        run: ctest --test-dir build --verbose
         env:
           DB_PATH: ${{runner.workspace}}/dbfile
              
