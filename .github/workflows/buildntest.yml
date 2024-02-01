@@ -12,8 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: install gcc
-        run: apt update && apt install sudo
-      - run: sudo apt install gcc
+        run: apt update && apt install gcc
       - name: create build env
         run: cmake -Bbuild
       - name: build
