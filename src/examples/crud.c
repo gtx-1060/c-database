@@ -10,7 +10,7 @@ void remove_rows_example(Storage* storage, OpenedTable* table);
 void update_rows_example(Storage* storage, OpenedTable* table);
 
 int main(void) {
-    Storage* storage = init_storage("/home/vlad/Music/dbfile");
+    Storage* storage = init_storage(getenv("DB_PATH"));
     OpenedTable table;
 
     // open table or create if not exists

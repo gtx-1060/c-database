@@ -3,7 +3,7 @@ name: build and run simple test
 on:
   push:
     branches: [master, main]
-  pull-request:
+  pull_request:
     branches: [master, main]
 
 jobs:
@@ -20,4 +20,6 @@ jobs:
         run: cmake --build build
       - name: run tests
         run: ctest --test-dir build
+        env:
+          DB_PATH: ${{runner.workspace}}/dbfile
              
